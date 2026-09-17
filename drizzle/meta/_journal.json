@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1787387300639,
+      "tag": "0000_rapid_hiroim",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787389441002,
+      "tag": "0001_yummy_madame_hydra",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787836800000,
+      "tag": "0002_remove_guest_health_records",
+      "breakpoints": true
+    }
+  ]
+}

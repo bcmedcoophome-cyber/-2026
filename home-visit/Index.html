@@ -112,7 +112,7 @@
     <button class="btn" type="button" id="saveBtn">저장</button>
     <button class="btn primary" type="button" id="sendBtn">전송</button>
   </div>
-  <div id="draftState">저장: 이 휴대폰에 보관 · 전송: 방문기록지를 드라이브로</div>
+  <div id="draftState">저장: 휴대폰+시트에 임시저장 · 전송: 방문기록지 만들기</div>
 </footer>
 
 <dialog id="confirmDlg">
@@ -401,7 +401,7 @@ function validate() {
 function callServer(fn, arg) {
   return new Promise((resolve, reject) => {
     if (!IS_GAS) {
-      setTimeout(() => fn === 'saveVisit' ? resolve({ ok: true, docUrl: '', demo: true }) : resolve({ patients: [] }), 400);
+      setTimeout(() => fn === 'getInitData' ? resolve({ patients: [] }) : resolve({ ok: true, docUrl: '', demo: true }), 400);
       return;
     }
     google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg);
@@ -491,7 +491,17 @@ function saveCurrent(silent) {
   list.push({ id: state._id, savedAt: Date.now(), state: JSON.parse(JSON.stringify(state)) });
   LS.set(KEY_SAVED, list);
   showSaved();
-  if (!silent) flash('okBanner', `💾 ${esc(state.patient)}님 기록을 이 휴대폰에 저장했습니다. 나중에 [목록]에서 불러와 전송하세요.`);
+  if (!silent) {
+    const who = esc(state.patient);
+    if (!IS_GAS) {
+      flash('okBanner', `💾 ${who}님 기록을 이 휴대폰에 저장했습니다.`);
+    } else {
+      flash('okBanner', `💾 ${who}님 기록을 휴대폰에 저장했습니다. 스프레드시트에 저장하는 중…`, 20000);
+      callServer('saveDraft', buildRecord())
+        .then(() => flash('okBanner', `💾 ${who}님 기록을 휴대폰과 스프레드시트에 저장했습니다(임시저장). 완료되면 [전송]을 눌러 방문기록지를 만드세요.`))
+        .catch(err => showError(`휴대폰에는 저장했지만 스프레드시트 저장은 실패했습니다(${err && err.message ? err.message : '네트워크'}). 신호가 잡히면 [저장]을 다시 눌러 주세요.`));
+    }
+  }
   return true;
 }
 
@@ -549,7 +559,7 @@ function resetForm(silent) {
     s.classList.toggle('closed', !sec.open);
   });
   paint(); tick();
-  $('draftState').textContent = '저장: 이 휴대폰에 보관 · 전송: 방문기록지를 드라이브로';
+  $('draftState').textContent = '저장: 휴대폰+시트에 임시저장 · 전송: 방문기록지 만들기';
   window.scrollTo({ top: 0 });
 }
 

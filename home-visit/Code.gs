@@ -3,7 +3,7 @@
  *
  * 휴대폰에서 체크한 상담 내용을 받아
  *   1) 구글 시트(방문기록)에 한 줄씩 누적하고
- *   2) 방문 건마다 구글 문서(상담기록지)를 월별 폴더에 만듭니다.
+ *   2) 방문 건마다 구글 문서(상담기록지)를 환자별 폴더에 만듭니다.
  *
  * 설치 방법은 같은 폴더의 README.md를 보세요.
  */
@@ -14,6 +14,8 @@ const SHEET_FILE_NAME = '재택의료 방문상담 기록부';
 const SHEET_NAME = '방문기록';
 const BASE_HEADERS = ['기록ID', '전송시각', '작성자', '구글계정'];
 const LINK_HEADER = '상담기록지';
+const DOC_TITLE = '재택의료 사회복지 상담기록지';
+const PATIENT_ROOT = '환자별';
 const CREATE_DOC = true; // 방문 건별 구글 문서가 필요 없으면 false
 
 function doGet() {
@@ -59,7 +61,7 @@ function getInitData() {
 
 /**
  * 상담 기록 저장.
- * record = { id, author, meta:{patient,date,visitType}, crisis:[...],
+ * record = { id, author, meta:{patient,birth,date,visitType}, crisis:[...],
  *            sections:[{title, items:[{label, value}]}] }
  */
 function saveVisit(record) {
@@ -171,39 +173,62 @@ function getSubFolder_(parent, name) {
   return it.hasNext() ? it.next() : parent.createFolder(name);
 }
 
+/** 환자 폴더: 재택의료 상담기록/환자별/홍길동(1945-03-12) */
+function getPatientFolder_(folder, name, birth) {
+  const root = getSubFolder_(folder, PATIENT_ROOT);
+  const safe = String(name).replace(/[\\/:*?"<>|]/g, '').trim();
+  return getSubFolder_(root, birth ? safe + '(' + birth + ')' : safe);
+}
+
+/** 방문 건별 상담기록지(구글 문서)를 환자 폴더에 만듦 */
 function createDoc_(folder, record) {
   const m = record.meta;
-  const sub = getSubFolder_(folder, String(m.date).slice(0, 7));
-  const name = [m.date, m.patient, m.visitType || '방문'].join('_');
+  const v = {};
+  (record.sections || []).forEach(sec => (sec.items || []).forEach(it => { v[it.label] = it.value || ''; }));
+  const birth = m.birth || v['생년월일'] || '';
+  const sub = getPatientFolder_(folder, m.patient, birth);
+  const name = [m.date, m.patient, m.visitType || '방문', '상담기록지'].join('_');
+
   const doc = DocumentApp.create(name);
   const body = doc.getBody();
-  body.setMarginTop(40).setMarginBottom(40).setMarginLeft(48).setMarginRight(48);
+  body.setMarginTop(36).setMarginBottom(36).setMarginLeft(44).setMarginRight(44);
 
-  body.getParagraphs()[0].setText(APP_TITLE).setHeading(DocumentApp.ParagraphHeading.TITLE);
-  body.appendParagraph(m.patient + '  |  ' + m.date + '  |  ' + (m.visitType || ''))
-    .setHeading(DocumentApp.ParagraphHeading.SUBTITLE);
+  body.getParagraphs()[0].setText(DOC_TITLE).setHeading(DocumentApp.ParagraphHeading.TITLE)
+    .setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+
+  // 머리 표: 인적사항
+  const head = body.appendTable([
+    ['환자명', m.patient, '생년월일', birth],
+    ['방문일', m.date, '방문유형', m.visitType || ''],
+    ['장기요양등급', v['장기요양등급'] || '', '장기요양기관', v['장기요양기관명'] || '']
+  ]);
+  head.setBorderColor('#9aa0a6');
+  for (let r = 0; r < head.getNumRows(); r++) {
+    [0, 2].forEach(c => head.getRow(r).getCell(c).setBackgroundColor('#f1f3f4').editAsText().setBold(true));
+  }
 
   if (record.crisis && record.crisis.length) {
     body.appendParagraph('⚠ 위기신호: ' + record.crisis.join(', '))
       .setBold(true).setForegroundColor('#c5221f');
   }
 
+  const inHead = ['환자명', '생년월일', '방문일', '방문유형', '장기요양등급', '장기요양기관명', '작성자'];
   (record.sections || []).forEach(sec => {
-    const rows = (sec.items || []).filter(it => it.value).map(it => [it.label, String(it.value)]);
+    const rows = (sec.items || []).filter(it => it.value && inHead.indexOf(it.label) < 0)
+      .map(it => [it.label, String(it.value)]);
     if (!rows.length) return;
-    body.appendParagraph(sec.title).setHeading(DocumentApp.ParagraphHeading.HEADING2);
+    body.appendParagraph('■ ' + sec.title).setHeading(DocumentApp.ParagraphHeading.HEADING3);
     const table = body.appendTable(rows);
-    table.setBorderColor('#dadce0');
+    table.setBorderColor('#9aa0a6');
     for (let i = 0; i < table.getNumRows(); i++) {
-      const c = table.getRow(i).getCell(0);
-      c.setWidth(120).setBackgroundColor('#f1f3f4');
-      c.editAsText().setBold(true);
+      table.getRow(i).getCell(0).setWidth(110).setBackgroundColor('#f1f3f4').editAsText().setBold(true);
     }
   });
 
   const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
-  body.appendParagraph('작성자: ' + (record.author || '') + '   ·   전송: ' + now)
-    .setForegroundColor('#5f6368').setFontSize(9);
+  body.appendParagraph('');
+  body.appendParagraph('작성일시: ' + now + '        작성자: ' + (record.author || '') + '  (서명)')
+    .setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
   doc.saveAndClose();
 
   DriveApp.getFileById(doc.getId()).moveTo(sub);

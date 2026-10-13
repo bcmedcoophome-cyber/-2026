@@ -72,7 +72,13 @@
   footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
     padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); z-index: 10; }
   footer .inner { max-width: 720px; margin: 0 auto; display: flex; gap: 8px; }
-  footer .btn.primary { flex: 1; }
+  footer .inner .btn { flex: 1; }
+  footer .btn.primary { flex: 1.6; }
+  .saved-item { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  .saved-item .who { flex: 1; min-width: 0; }
+  .saved-item .who small { display: block; color: var(--muted); font-size: 12px; }
+  #savedList { max-height: 60vh; overflow: auto; }
+  #savedList:empty::before { content: "저장된 기록이 없습니다."; display: block; padding: 16px; color: var(--muted); }
   #draftState { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
 
   dialog { border: none; border-radius: 16px; padding: 0; width: min(560px, calc(100vw - 24px)); background: var(--card); color: var(--ink); }
@@ -94,6 +100,7 @@
   <div id="demoBanner" class="banner info">미리보기 모드입니다. 구글 Apps Script로 배포하면 드라이브로 전송됩니다.</div>
   <div id="errBanner" class="banner danger"></div>
   <div id="queueBanner" class="banner info"><span id="queueText"></span><button class="btn small" id="retryBtn" type="button">다시 보내기</button></div>
+  <div id="savedBanner" class="banner info"><span id="savedText"></span><button class="btn small" id="savedOpenBtn" type="button">목록</button></div>
   <div id="okBanner" class="banner ok"></div>
   <div id="crisisBanner" class="banner danger"></div>
   <form id="form" autocomplete="off" onsubmit="return false"></form>
@@ -101,11 +108,11 @@
 
 <footer>
   <div class="inner">
-    <button class="btn" type="button" id="resetBtn">새로</button>
-    <button class="btn" type="button" id="copyBtn">요약복사</button>
-    <button class="btn primary" type="button" id="sendBtn">드라이브로 전송</button>
+    <button class="btn" type="button" id="resetBtn">NEW</button>
+    <button class="btn" type="button" id="saveBtn">저장</button>
+    <button class="btn primary" type="button" id="sendBtn">전송</button>
   </div>
-  <div id="draftState">입력 내용은 이 기기에 자동 임시저장됩니다</div>
+  <div id="draftState">저장: 이 휴대폰에 보관 · 전송: 상담기록지를 환자 폴더로</div>
 </footer>
 
 <dialog id="confirmDlg">
@@ -113,8 +120,15 @@
   <pre id="summary"></pre>
   <div class="d-foot">
     <button class="btn" type="button" id="cancelBtn">수정</button>
+    <button class="btn" type="button" id="copyBtn">요약복사</button>
     <button class="btn primary" type="button" id="confirmBtn">전송</button>
   </div>
+</dialog>
+
+<dialog id="savedDlg">
+  <div class="d-head">저장된 기록 (아직 전송 안 함)</div>
+  <div id="savedList"></div>
+  <div class="d-foot"><button class="btn" type="button" id="savedCloseBtn">닫기</button></div>
 </dialog>
 
 <datalist id="patientList"></datalist>
@@ -177,7 +191,7 @@ const LS = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem(k); } catch (e) {} }
 };
-const KEY_DRAFT = 'hv_draft', KEY_QUEUE = 'hv_queue', KEY_AUTHOR = 'hv_author', KEY_START = 'hv_start';
+const KEY_SAVED = 'hv_saved', KEY_DRAFT = 'hv_draft', KEY_QUEUE = 'hv_queue', KEY_AUTHOR = 'hv_author', KEY_START = 'hv_start';
 const ALL_FIELDS = FORM.flatMap(s => s.fields.map(f => Object.assign({ section: s }, f)));
 const $ = id => document.getElementById(id);
 let state = {};
@@ -351,7 +365,7 @@ function buildRecord() {
   return {
     id: state._id || (state._id = uid()),
     author: state.author || '',
-    meta: { patient: (state.patient || '').trim(), date: state.date, visitType: state.visitType || '' },
+    meta: { patient: (state.patient || '').trim(), birth: state.birth || '', date: state.date, visitType: state.visitType || '' },
     crisis: (state.crisis || []).filter(c => c !== '해당 없음'),
     sections: FORM.map(sec => ({
       title: sec.title,
@@ -402,6 +416,7 @@ async function send(rec) {
 async function onConfirm() {
   const rec = buildRecord();
   $('confirmDlg').close();
+  removeSaved(rec.id);
   const btn = $('sendBtn');
   btn.disabled = true; btn.textContent = '전송 중…';
   try {
@@ -412,13 +427,13 @@ async function onConfirm() {
     showError('전송하지 못했습니다(' + (err && err.message ? err.message : '네트워크') + '). 기기에 보관했으니 신호가 잡히면 "다시 보내기"를 눌러 주세요.');
     resetForm(true);
   } finally {
-    btn.disabled = false; btn.textContent = '드라이브로 전송';
+    btn.disabled = false; btn.textContent = '전송';
   }
 }
 
 function afterSent(rec, res) {
   const link = res && res.docUrl ? ` <a href="${esc(res.docUrl)}" target="_blank" rel="noopener">상담기록지 열기</a>` : '';
-  flash('okBanner', `✅ ${esc(rec.meta.patient)}님 기록을 드라이브에 저장했습니다.${res && res.demo ? ' (미리보기 — 실제 전송 안 됨)' : ''}${link}`, 15000);
+  flash('okBanner', `✅ ${esc(rec.meta.patient)}님 상담기록지를 환자 폴더에 저장했습니다.${res && res.demo ? ' (미리보기 — 실제 전송 안 됨)' : ''}${link}`, 15000);
   addPatient(rec);
   resetForm(true);
 }
@@ -465,6 +480,65 @@ function fillPatientList() {
   $('patientList').innerHTML = opts.map(p => `<option value="${esc(p.name)}"${p.birth ? ` label="${esc(p.birth)}"` : ''}>`).join('');
 }
 
+/* ---------- 저장(휴대폰에 보관) ---------- */
+function saveCurrent(silent) {
+  if (!hasValue(state.patient)) {
+    if (!silent) showError('환자명을 입력해야 저장할 수 있습니다.');
+    return false;
+  }
+  if (!state._id) state._id = uid();
+  const list = LS.get(KEY_SAVED, []).filter(x => x.id !== state._id);
+  list.push({ id: state._id, savedAt: Date.now(), state: JSON.parse(JSON.stringify(state)) });
+  LS.set(KEY_SAVED, list);
+  showSaved();
+  if (!silent) flash('okBanner', `💾 ${esc(state.patient)}님 기록을 이 휴대폰에 저장했습니다. 나중에 [목록]에서 불러와 전송하세요.`);
+  return true;
+}
+
+function removeSaved(id) {
+  LS.set(KEY_SAVED, LS.get(KEY_SAVED, []).filter(x => x.id !== id));
+  showSaved();
+}
+
+function showSaved() {
+  const list = LS.get(KEY_SAVED, []);
+  $('savedText').textContent = `💾 저장만 하고 전송 안 한 기록 ${list.length}건`;
+  $('savedBanner').classList.toggle('show', list.length > 0);
+  $('savedList').innerHTML = list.slice().reverse().map(x => {
+    const t = new Date(x.savedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return `<div class="saved-item"><div class="who"><b>${esc(x.state.patient)}</b> ${esc(x.state.visitType || '')}
+      <small>방문일 ${esc(x.state.date || '')} · 저장 ${esc(t)}</small></div>
+      <button class="btn small" type="button" data-load="${esc(x.id)}">불러오기</button>
+      <button class="btn small" type="button" data-del="${esc(x.id)}">삭제</button></div>`;
+  }).join('');
+}
+
+function onSavedClick(e) {
+  const load = e.target.dataset.load, del = e.target.dataset.del;
+  if (del && confirm('이 기록을 삭제할까요? 되돌릴 수 없습니다.')) removeSaved(del);
+  if (load) {
+    const item = LS.get(KEY_SAVED, []).find(x => x.id === load);
+    if (!item) return;
+    if (state._id !== load) saveCurrent(true);
+    state = item.state;
+    LS.set(KEY_DRAFT, state);
+    paint();
+    $('savedDlg').close();
+    window.scrollTo({ top: 0 });
+    flash('okBanner', `${esc(state.patient)}님 기록을 불러왔습니다. 이어서 작성하거나 [전송]하세요.`);
+  }
+}
+
+function onNew() {
+  if (hasValue(state.patient)) {
+    saveCurrent(true);
+    resetForm(true);
+    flash('okBanner', '이전 기록은 [저장] 목록에 보관했습니다. 새 방문을 시작합니다.');
+  } else {
+    resetForm(true);
+  }
+}
+
 /* ---------- 기타 UI ---------- */
 function resetForm(silent) {
   if (!silent && !confirm('입력 중인 내용을 지우고 새 방문을 시작할까요?')) return;
@@ -475,7 +549,7 @@ function resetForm(silent) {
     s.classList.toggle('closed', !sec.open);
   });
   paint(); tick();
-  $('draftState').textContent = '입력 내용은 이 기기에 자동 임시저장됩니다';
+  $('draftState').textContent = '저장: 이 휴대폰에 보관 · 전송: 상담기록지를 환자 폴더로';
   window.scrollTo({ top: 0 });
 }
 
@@ -505,7 +579,7 @@ function init() {
   paint();
   if (hasValue(state.patient)) flash('okBanner', '작성 중이던 기록을 불러왔습니다.');
   if (!IS_GAS) $('demoBanner').classList.add('show');
-  showQueue();
+  showQueue(); showSaved();
   tick(); setInterval(tick, 1000);
 
   $('sendBtn').addEventListener('click', () => {
@@ -515,7 +589,11 @@ function init() {
   });
   $('confirmBtn').addEventListener('click', onConfirm);
   $('cancelBtn').addEventListener('click', () => $('confirmDlg').close());
-  $('resetBtn').addEventListener('click', () => resetForm(false));
+  $('resetBtn').addEventListener('click', onNew);
+  $('saveBtn').addEventListener('click', () => saveCurrent(false));
+  $('savedOpenBtn').addEventListener('click', () => $('savedDlg').showModal());
+  $('savedCloseBtn').addEventListener('click', () => $('savedDlg').close());
+  $('savedList').addEventListener('click', onSavedClick);
   $('copyBtn').addEventListener('click', copySummary);
   $('retryBtn').addEventListener('click', flushQueue);
   window.addEventListener('online', flushQueue);

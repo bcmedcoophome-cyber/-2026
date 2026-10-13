@@ -3,20 +3,22 @@
  *
  * 휴대폰에서 체크한 상담 내용을 받아
  *   1) 구글 시트(방문기록)에 한 줄씩 누적하고
- *   2) 방문 건마다 구글 문서(상담기록지)를 환자별 폴더에 만듭니다.
+ *   2) 방문 건마다 구글 문서 「방문기록지_환자명_작성자_날짜」를 지정한 드라이브 폴더에 만듭니다.
  *
  * 설치 방법은 같은 폴더의 README.md를 보세요.
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const FOLDER_NAME = '재택의료 상담기록';
+// 방문기록지를 저장할 구글 드라이브 폴더 (「환자별 방문기록지 (사회복지)」)
+// 폴더 주소 https://drive.google.com/drive/folders/ 뒤의 ID 부분입니다.
+const TARGET_FOLDER_ID = '1LA6KMNOLoPhVf8H1qza6v6voN-U-PfeG';
+const FOLDER_NAME = '재택의료 상담기록'; // TARGET_FOLDER_ID를 비워두면 이 이름으로 새 폴더를 만듦
 const SHEET_FILE_NAME = '재택의료 방문상담 기록부';
 const SHEET_NAME = '방문기록';
 const BASE_HEADERS = ['기록ID', '전송시각', '작성자', '구글계정'];
-const LINK_HEADER = '상담기록지';
-const DOC_TITLE = '재택의료 사회복지 상담기록지';
-const PATIENT_ROOT = '환자별';
-const CREATE_DOC = true; // 방문 건별 구글 문서가 필요 없으면 false
+const LINK_HEADER = '방문기록지';
+const DOC_TITLE = '재택의료 방문기록지';
+const CREATE_DOC = true; // 방문 건별 방문기록지(구글 문서)가 필요 없으면 false
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
@@ -113,13 +115,13 @@ function saveVisit(record) {
 
 function ensureStorage_() {
   const props = PropertiesService.getScriptProperties();
-  const folderId = props.getProperty('FOLDER_ID');
+  const folderId = TARGET_FOLDER_ID || props.getProperty('FOLDER_ID');
   const sheetId = props.getProperty('SHEET_ID');
   let folder, ss;
 
   if (folderId) {
     try { folder = DriveApp.getFolderById(folderId); }
-    catch (e) { throw new Error('기록 폴더에 접근할 수 없습니다. 관리자에게 "' + FOLDER_NAME + '" 폴더 공유(편집자)를 요청하세요.'); }
+    catch (e) { throw new Error('방문기록지 폴더에 접근할 수 없습니다. 폴더 주인에게 편집자 공유를 요청하세요.'); }
   } else {
     folder = DriveApp.createFolder(FOLDER_NAME);
     props.setProperty('FOLDER_ID', folder.getId());
@@ -168,26 +170,14 @@ function safeCell_(v) {
   return /^[=+\-@]/.test(s) ? "'" + s : s;
 }
 
-function getSubFolder_(parent, name) {
-  const it = parent.getFoldersByName(name);
-  return it.hasNext() ? it.next() : parent.createFolder(name);
-}
-
-/** 환자 폴더: 재택의료 상담기록/환자별/홍길동(1945-03-12) */
-function getPatientFolder_(folder, name, birth) {
-  const root = getSubFolder_(folder, PATIENT_ROOT);
-  const safe = String(name).replace(/[\\/:*?"<>|]/g, '').trim();
-  return getSubFolder_(root, birth ? safe + '(' + birth + ')' : safe);
-}
-
-/** 방문 건별 상담기록지(구글 문서)를 환자 폴더에 만듦 */
+/** 방문 건별 방문기록지(구글 문서)를 지정 폴더에 만듦: 방문기록지_환자명_작성자_날짜 */
 function createDoc_(folder, record) {
   const m = record.meta;
   const v = {};
   (record.sections || []).forEach(sec => (sec.items || []).forEach(it => { v[it.label] = it.value || ''; }));
   const birth = m.birth || v['생년월일'] || '';
-  const sub = getPatientFolder_(folder, m.patient, birth);
-  const name = [m.date, m.patient, m.visitType || '방문', '상담기록지'].join('_');
+  const clean = t => String(t || '').replace(/[\\/:*?"<>|_]/g, ' ').trim();
+  const name = ['방문기록지', clean(m.patient), clean(record.author) || '작성자미상', m.date].join('_');
 
   const doc = DocumentApp.create(name);
   const body = doc.getBody();
@@ -231,6 +221,6 @@ function createDoc_(folder, record) {
     .setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
   doc.saveAndClose();
 
-  DriveApp.getFileById(doc.getId()).moveTo(sub);
+  DriveApp.getFileById(doc.getId()).moveTo(folder);
   return doc.getUrl();
 }

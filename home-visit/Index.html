@@ -112,7 +112,7 @@
     <button class="btn" type="button" id="saveBtn">저장</button>
     <button class="btn primary" type="button" id="sendBtn">전송</button>
   </div>
-  <div id="draftState">저장: 이 휴대폰에 보관 · 전송: 상담기록지를 환자 폴더로</div>
+  <div id="draftState">저장: 이 휴대폰에 보관 · 전송: 방문기록지를 드라이브로</div>
 </footer>
 
 <dialog id="confirmDlg">
@@ -145,7 +145,7 @@ const FORM = [
     { key: 'patient', label: '환자명', type: 'text', required: true, list: 'patientList', half: true },
     { key: 'birth', label: '생년월일', type: 'text', half: true, placeholder: '예: 19450312', numeric: true },
     { key: 'date', label: '방문일', type: 'date', required: true, half: true },
-    { key: 'author', label: '작성자', type: 'text', half: true, remember: true },
+    { key: 'author', label: '작성자', type: 'text', required: true, half: true, remember: true },
     { key: 'visitType', label: '방문유형', type: 'single', options: ['첫방문', '정기방문', '수시방문', '임종돌봄', '통합돌봄'] },
     { key: 'ltc', label: '장기요양등급', type: 'single', carry: true, options: ['미신청', '신청중', '1등급', '2등급', '3등급', '4등급', '5등급', '인지지원', '등급외'] },
     { key: 'ltcAgency', label: '장기요양기관명', type: 'text', carry: true, placeholder: '이용 중인 기관 (예: ○○재가복지센터)' }
@@ -432,8 +432,8 @@ async function onConfirm() {
 }
 
 function afterSent(rec, res) {
-  const link = res && res.docUrl ? ` <a href="${esc(res.docUrl)}" target="_blank" rel="noopener">상담기록지 열기</a>` : '';
-  flash('okBanner', `✅ ${esc(rec.meta.patient)}님 상담기록지를 환자 폴더에 저장했습니다.${res && res.demo ? ' (미리보기 — 실제 전송 안 됨)' : ''}${link}`, 15000);
+  const link = res && res.docUrl ? ` <a href="${esc(res.docUrl)}" target="_blank" rel="noopener">방문기록지 열기</a>` : '';
+  flash('okBanner', `✅ ${esc(rec.meta.patient)}님 방문기록지를 드라이브 폴더에 저장했습니다.${res && res.demo ? ' (미리보기 — 실제 전송 안 됨)' : ''}${link}`, 15000);
   addPatient(rec);
   resetForm(true);
 }
@@ -549,7 +549,7 @@ function resetForm(silent) {
     s.classList.toggle('closed', !sec.open);
   });
   paint(); tick();
-  $('draftState').textContent = '저장: 이 휴대폰에 보관 · 전송: 상담기록지를 환자 폴더로';
+  $('draftState').textContent = '저장: 이 휴대폰에 보관 · 전송: 방문기록지를 드라이브로';
   window.scrollTo({ top: 0 });
 }
 

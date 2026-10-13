@@ -4,7 +4,7 @@
   "description": "재택의료 사회복지 방문상담 체크리스트",
   "start_url": "./?go",
   "scope": "./",
-  "display": "browser",
+  "display": "standalone",
   "background_color": "#141b4d",
   "theme_color": "#141b4d",
   "lang": "ko",

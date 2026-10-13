@@ -112,7 +112,7 @@
     <button class="btn" type="button" id="saveBtn">저장</button>
     <button class="btn primary" type="button" id="sendBtn">전송</button>
   </div>
-  <div id="draftState">저장: 이 휴대폰에 보관 · 전송: 방문기록지를 드라이브로</div>
+  <div id="draftState">저장: 휴대폰+시트에 임시저장 · 전송: 방문기록지 만들기</div>
 </footer>
 
 <dialog id="confirmDlg">
@@ -148,7 +148,9 @@ const FORM = [
     { key: 'author', label: '작성자', type: 'text', required: true, half: true, remember: true },
     { key: 'visitType', label: '방문유형', type: 'single', options: ['첫방문', '정기방문', '수시방문', '임종돌봄', '통합돌봄'] },
     { key: 'ltc', label: '장기요양등급', type: 'single', carry: true, options: ['미신청', '신청중', '1등급', '2등급', '3등급', '4등급', '5등급', '인지지원', '등급외'] },
-    { key: 'ltcAgency', label: '장기요양기관명', type: 'text', carry: true, placeholder: '이용 중인 기관 (예: ○○재가복지센터)' }
+    { key: 'ltcAgency', label: '장기요양기관명', type: 'text', carry: true, placeholder: '이용 중인 기관 (예: ○○재가복지센터)' },
+    { key: 'disability', label: '장애정도', type: 'single', carry: true, options: ['해당 없음', '중증', '경증'] },
+    { key: 'disabilityType', label: '장애유형', type: 'text', carry: true, placeholder: '예: 지체장애, 뇌병변장애, 시각장애' }
   ]},
   { id: 'home', title: '주거환경', fields: [
     { key: 'housing', label: '주거형태', type: 'single', carry: true, options: ['자가', '전세·월세', '공공임대', '고시원·쪽방', '기타'] },
@@ -401,7 +403,7 @@ function validate() {
 function callServer(fn, arg) {
   return new Promise((resolve, reject) => {
     if (!IS_GAS) {
-      setTimeout(() => fn === 'saveVisit' ? resolve({ ok: true, docUrl: '', demo: true }) : resolve({ patients: [] }), 400);
+      setTimeout(() => fn === 'getInitData' ? resolve({ patients: [] }) : resolve({ ok: true, docUrl: '', demo: true }), 400);
       return;
     }
     google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg);
@@ -491,7 +493,17 @@ function saveCurrent(silent) {
   list.push({ id: state._id, savedAt: Date.now(), state: JSON.parse(JSON.stringify(state)) });
   LS.set(KEY_SAVED, list);
   showSaved();
-  if (!silent) flash('okBanner', `💾 ${esc(state.patient)}님 기록을 이 휴대폰에 저장했습니다. 나중에 [목록]에서 불러와 전송하세요.`);
+  if (!silent) {
+    const who = esc(state.patient);
+    if (!IS_GAS) {
+      flash('okBanner', `💾 ${who}님 기록을 이 휴대폰에 저장했습니다.`);
+    } else {
+      flash('okBanner', `💾 ${who}님 기록을 휴대폰에 저장했습니다. 스프레드시트에 저장하는 중…`, 20000);
+      callServer('saveDraft', buildRecord())
+        .then(() => flash('okBanner', `💾 ${who}님 기록을 휴대폰과 스프레드시트에 저장했습니다(임시저장). 완료되면 [전송]을 눌러 방문기록지를 만드세요.`))
+        .catch(err => showError(`휴대폰에는 저장했지만 스프레드시트 저장은 실패했습니다(${err && err.message ? err.message : '네트워크'}). 신호가 잡히면 [저장]을 다시 눌러 주세요.`));
+    }
+  }
   return true;
 }
 
@@ -549,7 +561,7 @@ function resetForm(silent) {
     s.classList.toggle('closed', !sec.open);
   });
   paint(); tick();
-  $('draftState').textContent = '저장: 이 휴대폰에 보관 · 전송: 방문기록지를 드라이브로';
+  $('draftState').textContent = '저장: 휴대폰+시트에 임시저장 · 전송: 방문기록지 만들기';
   window.scrollTo({ top: 0 });
 }
 

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>재택방문</title>
+<meta name="theme-color" content="#141b4d">
+<meta name="apple-mobile-web-app-title" content="재택방문">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script>
+  /*
+   * 홈 화면 아이콘용 실행 페이지.
+   * 앱(Apps Script 웹앱) 주소는 저장소에 넣지 않고, 각 휴대폰에만 기억합니다.
+   * ?go 로 열리면(홈 화면 아이콘) 저장된 주소로 바로 이동합니다.
+   */
+  var KEY = 'hv_exec_id';
+  function get() { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
+  function set(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
+  function execUrl(id) { return 'https://script.google.com/macros/s/' + id + '/exec'; }
+  var hashId = (location.hash.match(/^#([A-Za-z0-9_-]{20,})$/) || [])[1];
+  if (hashId) set(hashId);
+  var id = hashId || get();
+  var params = new URLSearchParams(location.search);
+  if (id && params.has('go') && !params.has('setup')) location.replace(execUrl(id));
+</script>
+<style>
+  :root { --bg: #f3f5fb; --card: #fff; --ink: #161c3a; --muted: #5d6480; --line: #dde1ef; --brand: #2e3a8c; --brand-ink: #fff; --ok: #2e3a8c; --err: #c5221f; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #10131f; --card: #1a1e2e; --ink: #e8ebf6; --muted: #a3a9c2; --line: #2d3350; --brand: #9fb0ff; --brand-ink: #0e1430; --ok: #9fb0ff; --err: #f28b82; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; }
+  main { max-width: 480px; margin: 0 auto; padding: 32px 16px calc(32px + env(safe-area-inset-bottom)); display: grid; gap: 16px; }
+  .head { display: flex; align-items: center; gap: 14px; }
+  .head img { width: 64px; height: 64px; border-radius: 15px; }
+  h1 { font-size: 22px; margin: 0; }
+  .sub { color: var(--muted); font-size: 14px; margin: 2px 0 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
+  label { font-weight: 700; font-size: 14px; }
+  input { width: 100%; font: inherit; font-size: 15px; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .btn { display: block; width: 100%; text-align: center; font: inherit; font-weight: 700; padding: 14px; border-radius: 12px; border: 0; background: var(--brand); color: var(--brand-ink); text-decoration: none; cursor: pointer; }
+  .msg { font-size: 14px; margin: 0; }
+  .msg.err { color: var(--err); }
+  .msg.ok { color: var(--ok); font-weight: 700; }
+  ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 15px; }
+  .small { font-size: 13px; color: var(--muted); }
+  .small a { color: inherit; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="head">
+    <img src="icon-192.png" alt="">
+    <div>
+      <h1>재택의료 방문상담</h1>
+      <p class="sub">사회복지 방문기록지 · 홈 화면 바로가기</p>
+    </div>
+  </div>
+
+  <section class="card" id="setup">
+    <label for="url">1. 앱 주소 붙여넣기</label>
+    <input id="url" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
+    <button class="btn" type="button" id="saveBtn">이 휴대폰에 기억하기</button>
+    <p class="msg" id="msg" hidden></p>
+  </section>
+
+  <section class="card" id="ready" hidden>
+    <p class="msg ok">✅ 앱 주소를 이 휴대폰에 기억했습니다.</p>
+    <label>2. 홈 화면에 추가하기</label>
+    <ol>
+      <li><b>안드로이드(크롬)</b>: 오른쪽 위 ⋮ → <b>홈 화면에 추가</b></li>
+      <li><b>아이폰(사파리)</b>: 아래 공유 버튼 <b>⬆</b> → <b>홈 화면에 추가</b></li>
+    </ol>
+    <p class="small">홈 화면의 남색 집 아이콘을 누르면 바로 방문상담 앱이 열립니다.</p>
+    <a class="btn" id="openBtn" href="#">지금 앱 열기</a>
+  </section>
+
+  <p class="small">앱 주소는 이 휴대폰에만 저장되고 다른 곳으로 보내지 않습니다. 주소가 바뀌었으면 <a href="?setup">여기</a>에서 다시 붙여넣으세요.</p>
+</main>
+<script>
+  function parseId(text) {
+    var m = String(text).trim().match(/\/macros\/(?:u\/\d+\/)?s\/([A-Za-z0-9_-]{20,})\/(?:exec|dev)/);
+    return m ? m[1] : '';
+  }
+  function showReady(id) {
+    document.getElementById('ready').hidden = false;
+    document.getElementById('openBtn').href = execUrl(id);
+    // 아이폰은 '홈 화면에 추가' 때 지금 주소를 그대로 저장하므로, 바로 실행되는 주소로 바꿔 둠
+    history.replaceState(null, '', '?go#' + id);
+  }
+  document.getElementById('saveBtn').addEventListener('click', function () {
+    var id = parseId(document.getElementById('url').value);
+    var msg = document.getElementById('msg');
+    msg.hidden = false;
+    if (!id) {
+      msg.className = 'msg err';
+      msg.textContent = '주소를 알아볼 수 없습니다. Apps Script "배포 관리"의 웹 앱 URL(…/exec)을 그대로 붙여넣어 주세요.';
+      return;
+    }
+    set(id);
+    msg.hidden = true;
+    showReady(id);
+  });
+  var cur = get();
+  if (cur) { document.getElementById('url').value = execUrl(cur); showReady(cur); }
+</script>
+</body>
+</html>

@@ -2,8 +2,9 @@
  * 재택의료 사회복지 방문상담 체크리스트 — Google Apps Script 서버 코드
  *
  * 휴대폰에서 체크한 상담 내용을 받아
- *   1) 구글 시트(방문기록)에 한 줄씩 누적하고
- *   2) 방문 건마다 구글 문서 「방문기록지_환자명_작성자_날짜」를 지정한 드라이브 폴더에 만듭니다.
+ *   1) [저장] 시 구글 시트(방문기록)에 '임시저장'으로 기록하고
+ *   2) [전송] 시 같은 줄을 '전송완료'로 바꾸고, 방문 건마다 구글 문서 「방문기록지_환자명_작성자_날짜」를
+ *      지정한 드라이브 폴더 안의 작성자별/월별 폴더(예: 김민정/2026-10)에 만듭니다.
  *
  * 설치 방법은 같은 폴더의 README.md를 보세요.
  */
@@ -15,7 +16,10 @@ const TARGET_FOLDER_ID = '1LA6KMNOLoPhVf8H1qza6v6voN-U-PfeG';
 const FOLDER_NAME = '재택의료 상담기록'; // TARGET_FOLDER_ID를 비워두면 이 이름으로 새 폴더를 만듦
 const SHEET_FILE_NAME = '재택의료 방문상담 기록부';
 const SHEET_NAME = '방문기록';
-const BASE_HEADERS = ['기록ID', '전송시각', '작성자', '구글계정'];
+const BASE_HEADERS = ['기록ID', '전송시각', '작성자', '구글계정', '상태'];
+const STATUS_HEADER = '상태';
+const STATUS_DRAFT = '임시저장';
+const STATUS_SENT = '전송완료';
 const LINK_HEADER = '방문기록지';
 const DOC_TITLE = '재택의료 방문기록지';
 const CREATE_DOC = true; // 방문 건별 방문기록지(구글 문서)가 필요 없으면 false
@@ -62,11 +66,20 @@ function getInitData() {
 }
 
 /**
- * 상담 기록 저장.
+ * [저장] 버튼: 시트에 '임시저장' 상태로 기록 (같은 기록은 같은 줄을 덮어씀, 문서는 만들지 않음)
  * record = { id, author, meta:{patient,birth,date,visitType}, crisis:[...],
  *            sections:[{title, items:[{label, value}]}] }
  */
+function saveDraft(record) {
+  return upsertVisit_(record, false);
+}
+
+/** [전송] 버튼: 방문기록지 문서를 만들고 같은 줄을 '전송완료'로 바꿈 */
 function saveVisit(record) {
+  return upsertVisit_(record, true);
+}
+
+function upsertVisit_(record, final) {
   if (!record || !record.id || !record.meta || !record.meta.patient || !record.meta.date) {
     throw new Error('환자명과 방문일은 꼭 입력해야 합니다.');
   }
@@ -76,19 +89,23 @@ function saveVisit(record) {
     const { folder, ss } = ensureStorage_();
     const sh = getSheet_(ss);
 
-    // 같은 기록을 다시 보낸 경우(네트워크 재시도) 중복 저장하지 않음
+    // 이미 있는 기록(저장했던 기록, 또는 네트워크 재시도)은 같은 줄을 찾아 갱신
+    let rowNo = 0;
     if (sh.getLastRow() > 1) {
       const found = sh.getRange(2, 1, sh.getLastRow() - 1, 1)
         .createTextFinder(record.id).matchEntireCell(true).findNext();
-      if (found) {
-        const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-        const linkCol = header.indexOf(LINK_HEADER);
-        const docUrl = linkCol >= 0 ? sh.getRange(found.getRow(), linkCol + 1).getDisplayValue() : '';
-        return { ok: true, duplicate: true, docUrl: docUrl, sheetUrl: ss.getUrl() };
+      if (found) rowNo = found.getRow();
+    }
+    if (rowNo) {
+      const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+      const cell = name => header.indexOf(name) >= 0 ? sh.getRange(rowNo, header.indexOf(name) + 1).getDisplayValue() : '';
+      if (cell(STATUS_HEADER) === STATUS_SENT) {
+        // 이미 전송 완료된 기록: 중복 문서를 만들지 않음
+        return { ok: true, duplicate: true, docUrl: cell(LINK_HEADER), sheetUrl: ss.getUrl() };
       }
     }
 
-    const docUrl = CREATE_DOC ? createDoc_(folder, record) : '';
+    const docUrl = final && CREATE_DOC ? createDoc_(folder, record) : '';
     const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
 
     const data = {};
@@ -96,6 +113,7 @@ function saveVisit(record) {
     data['전송시각'] = now;
     data['작성자'] = record.author || '';
     data['구글계정'] = Session.getActiveUser().getEmail() || '';
+    data[STATUS_HEADER] = final ? STATUS_SENT : STATUS_DRAFT;
     (record.sections || []).forEach(sec => {
       (sec.items || []).forEach(it => { data[it.label] = it.value || ''; });
     });
@@ -103,9 +121,9 @@ function saveVisit(record) {
 
     const header = ensureHeaders_(sh, Object.keys(data));
     const row = header.map(h => safeCell_(data[h]));
-    const target = sh.getRange(sh.getLastRow() + 1, 1, 1, row.length);
+    const target = sh.getRange(rowNo || sh.getLastRow() + 1, 1, 1, row.length);
     target.setNumberFormat('@').setValues([row]);
-    return { ok: true, docUrl: docUrl, sheetUrl: ss.getUrl() };
+    return { ok: true, docUrl: docUrl, sheetUrl: ss.getUrl(), status: data[STATUS_HEADER] };
   } finally {
     lock.releaseLock();
   }
@@ -170,7 +188,16 @@ function safeCell_(v) {
   return /^[=+\-@]/.test(s) ? "'" + s : s;
 }
 
-/** 방문 건별 방문기록지(구글 문서)를 지정 폴더에 만듦: 방문기록지_환자명_작성자_날짜 */
+/** 하위 폴더를 이름으로 찾고, 없으면 만듦 */
+function getSubFolder_(parent, name) {
+  const it = parent.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parent.createFolder(name);
+}
+
+/**
+ * 방문기록지(구글 문서)를 작성자별·월별 폴더에 만듦
+ *   지정 폴더 / 김민정 / 2026-10 / 방문기록지_환자명_작성자_날짜
+ */
 function createDoc_(folder, record) {
   const m = record.meta;
   const v = {};
@@ -181,46 +208,64 @@ function createDoc_(folder, record) {
 
   const doc = DocumentApp.create(name);
   const body = doc.getBody();
-  body.setMarginTop(36).setMarginBottom(36).setMarginLeft(44).setMarginRight(44);
+  body.setMarginTop(36);
+  body.setMarginBottom(36);
+  body.setMarginLeft(44);
+  body.setMarginRight(44);
 
-  body.getParagraphs()[0].setText(DOC_TITLE).setHeading(DocumentApp.ParagraphHeading.TITLE)
-    .setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  // 주의: Paragraph.setText()는 아무것도 돌려주지 않으므로 이어 쓰지(체이닝) 않음
+  const title = body.getParagraphs()[0];
+  title.setText(DOC_TITLE);
+  title.setHeading(DocumentApp.ParagraphHeading.TITLE);
+  title.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
 
   // 머리 표: 인적사항
   const head = body.appendTable([
     ['환자명', m.patient, '생년월일', birth],
     ['방문일', m.date, '방문유형', m.visitType || ''],
-    ['장기요양등급', v['장기요양등급'] || '', '장기요양기관', v['장기요양기관명'] || '']
+    ['장기요양등급', v['장기요양등급'] || '', '장기요양기관', v['장기요양기관명'] || ''],
+    ['장애정도', v['장애정도'] || '', '장애유형', v['장애유형'] || '']
   ]);
   head.setBorderColor('#9aa0a6');
   for (let r = 0; r < head.getNumRows(); r++) {
-    [0, 2].forEach(c => head.getRow(r).getCell(c).setBackgroundColor('#f1f3f4').editAsText().setBold(true));
+    [0, 2].forEach(c => styleLabelCell_(head.getRow(r).getCell(c)));
   }
 
   if (record.crisis && record.crisis.length) {
-    body.appendParagraph('⚠ 위기신호: ' + record.crisis.join(', '))
-      .setBold(true).setForegroundColor('#c5221f');
+    const warn = body.appendParagraph('⚠ 위기신호: ' + record.crisis.join(', '));
+    warn.editAsText().setBold(true);
+    warn.editAsText().setForegroundColor('#c5221f');
   }
 
-  const inHead = ['환자명', '생년월일', '방문일', '방문유형', '장기요양등급', '장기요양기관명', '작성자'];
+  const inHead = ['환자명', '생년월일', '방문일', '방문유형', '장기요양등급', '장기요양기관명', '장애정도', '장애유형', '작성자'];
   (record.sections || []).forEach(sec => {
     const rows = (sec.items || []).filter(it => it.value && inHead.indexOf(it.label) < 0)
       .map(it => [it.label, String(it.value)]);
     if (!rows.length) return;
-    body.appendParagraph('■ ' + sec.title).setHeading(DocumentApp.ParagraphHeading.HEADING3);
+    const h = body.appendParagraph('■ ' + sec.title);
+    h.setHeading(DocumentApp.ParagraphHeading.HEADING3);
     const table = body.appendTable(rows);
     table.setBorderColor('#9aa0a6');
     for (let i = 0; i < table.getNumRows(); i++) {
-      table.getRow(i).getCell(0).setWidth(110).setBackgroundColor('#f1f3f4').editAsText().setBold(true);
+      const cell = table.getRow(i).getCell(0);
+      cell.setWidth(110);
+      styleLabelCell_(cell);
     }
   });
 
   const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
   body.appendParagraph('');
-  body.appendParagraph('작성일시: ' + now + '        작성자: ' + (record.author || '') + '  (서명)')
-    .setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+  const sign = body.appendParagraph('작성일시: ' + now + '        작성자: ' + (record.author || '') + '  (서명)');
+  sign.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
   doc.saveAndClose();
 
-  DriveApp.getFileById(doc.getId()).moveTo(folder);
+  const authorFolder = getSubFolder_(folder, clean(record.author) || '작성자미상');
+  const monthFolder = getSubFolder_(authorFolder, String(m.date).slice(0, 7));
+  DriveApp.getFileById(doc.getId()).moveTo(monthFolder);
   return doc.getUrl();
+}
+
+function styleLabelCell_(cell) {
+  cell.setBackgroundColor('#f1f3f4');
+  cell.editAsText().setBold(true);
 }

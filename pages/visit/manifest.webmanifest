@@ -1,0 +1,16 @@
+{
+  "name": "재택의료 방문상담",
+  "short_name": "재택방문",
+  "description": "재택의료 사회복지 방문상담 체크리스트",
+  "start_url": "./?go",
+  "scope": "./",
+  "display": "browser",
+  "background_color": "#141b4d",
+  "theme_color": "#141b4d",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

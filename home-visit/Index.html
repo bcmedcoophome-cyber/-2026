@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>재택의료 방문상담</title>
+<style>
+  :root {
+    --bg: #f4f6f8; --card: #fff; --ink: #1f2933; --muted: #6b7680; --line: #dfe3e8;
+    --brand: #1a73e8; --brand-ink: #fff; --brand-soft: #e8f0fe;
+    --danger: #c5221f; --danger-soft: #fce8e6; --ok: #188038; --ok-soft: #e6f4ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121417; --card: #1c1f24; --ink: #e8eaed; --muted: #9aa0a6; --line: #343a40;
+      --brand: #8ab4f8; --brand-ink: #10131a; --brand-soft: #1f2a3d;
+      --danger: #f28b82; --danger-soft: #3b1f1d; --ok: #81c995; --ok-soft: #1b3122;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; }
+  header { position: sticky; top: 0; z-index: 10; background: var(--card); border-bottom: 1px solid var(--line);
+    padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: 17px; margin: 0; flex: 1; }
+  #timer { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--muted); }
+  #timer.warn { color: var(--danger); font-weight: 700; }
+  main { max-width: 720px; margin: 0 auto; padding: 12px 16px 120px; }
+  .banner { border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; font-size: 14px; display: none; }
+  .banner.show { display: block; }
+  .banner.info { background: var(--brand-soft); }
+  .banner.danger { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+  .banner.ok { background: var(--ok-soft); color: var(--ok); }
+  .banner a { color: inherit; font-weight: 700; }
+  .banner button { margin-left: 6px; }
+
+  section.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
+  section.card > h2 { margin: 0; font-size: 16px; padding: 14px 16px; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+  section.card > h2 .count { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
+  section.card > h2 .count.done { color: var(--ok); }
+  section.card > h2::after { content: "▾"; color: var(--muted); font-size: 14px; }
+  section.card.closed > h2::after { content: "▸"; }
+  section.card.closed .body { display: none; }
+  section.card.crisis > h2 { color: var(--danger); }
+  .body { padding: 0 16px 14px; }
+  .field { margin-bottom: 14px; }
+  .field > label, .field > .label { display: block; font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+  .req { color: var(--danger); }
+  input[type=text], input[type=date], input[type=number], textarea {
+    width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 10px; padding: 11px 12px; }
+  textarea { min-height: 96px; resize: vertical; }
+  input:focus, textarea:focus { outline: 2px solid var(--brand); border-color: transparent; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; min-width: 0; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px;
+    padding: 9px 14px; font: inherit; font-size: 15px; min-height: 42px; cursor: pointer; }
+  .chip[aria-pressed=true] { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); font-weight: 600; }
+  .crisis .chip[aria-pressed=true] { background: var(--danger); border-color: var(--danger); }
+  .phrases { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .phrase { font: inherit; font-size: 13px; border: 1px dashed var(--line); background: transparent; color: var(--muted);
+    border-radius: 8px; padding: 5px 9px; cursor: pointer; }
+
+  .btn { font: inherit; font-weight: 700; border-radius: 12px; padding: 13px 16px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); cursor: pointer; }
+  .btn.primary { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+  .btn.small { padding: 6px 10px; font-size: 13px; border-radius: 8px; }
+  .btn:disabled { opacity: .5; }
+  footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); z-index: 10; }
+  footer .inner { max-width: 720px; margin: 0 auto; display: flex; gap: 8px; }
+  footer .btn.primary { flex: 1; }
+  #draftState { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
+
+  dialog { border: none; border-radius: 16px; padding: 0; width: min(560px, calc(100vw - 24px)); background: var(--card); color: var(--ink); }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog .d-head { padding: 14px 16px; font-weight: 700; border-bottom: 1px solid var(--line); }
+  dialog pre { margin: 0; padding: 14px 16px; white-space: pre-wrap; word-break: keep-all; font: inherit; font-size: 14px;
+    max-height: 58vh; overflow: auto; }
+  dialog .d-foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  dialog .d-foot .btn { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏠 재택의료 방문상담</h1>
+  <span id="timer" title="방문 경과시간">00:00</span>
+</header>
+
+<main>
+  <div id="demoBanner" class="banner info">미리보기 모드입니다. 구글 Apps Script로 배포하면 드라이브로 전송됩니다.</div>
+  <div id="errBanner" class="banner danger"></div>
+  <div id="queueBanner" class="banner info"><span id="queueText"></span><button class="btn small" id="retryBtn" type="button">다시 보내기</button></div>
+  <div id="okBanner" class="banner ok"></div>
+  <div id="crisisBanner" class="banner danger"></div>
+  <form id="form" autocomplete="off" onsubmit="return false"></form>
+</main>
+
+<footer>
+  <div class="inner">
+    <button class="btn" type="button" id="resetBtn">새로</button>
+    <button class="btn" type="button" id="copyBtn">요약복사</button>
+    <button class="btn primary" type="button" id="sendBtn">드라이브로 전송</button>
+  </div>
+  <div id="draftState">입력 내용은 이 기기에 자동 임시저장됩니다</div>
+</footer>
+
+<dialog id="confirmDlg">
+  <div class="d-head">전송 전 확인</div>
+  <pre id="summary"></pre>
+  <div class="d-foot">
+    <button class="btn" type="button" id="cancelBtn">수정</button>
+    <button class="btn primary" type="button" id="confirmBtn">전송</button>
+  </div>
+</dialog>
+
+<datalist id="patientList"></datalist>
+
+<script>
+/* =====================================================================
+ *  체크리스트 항목 정의 — 센터 상황에 맞게 이 부분만 고치면 됩니다.
+ *  type: text | date | single(하나 선택) | multi(여러 개) | memo(긴 글)
+ *  carry: true → 같은 환자 재방문 시 지난 기록에서 자동으로 채움
+ *  label은 시트의 열 이름이 되므로 서로 겹치지 않게 해주세요.
+ * ===================================================================== */
+const FORM = [
+  { id: 'basic', title: '기본정보', open: true, fields: [
+    { key: 'patient', label: '환자명', type: 'text', required: true, list: 'patientList', half: true },
+    { key: 'pid', label: '환자번호', type: 'text', half: true, placeholder: '선택' },
+    { key: 'date', label: '방문일', type: 'date', required: true },
+    { key: 'visitType', label: '방문유형', type: 'single', options: ['초기평가', '정기방문', '수시방문', '퇴원 후', '임종기'] },
+    { key: 'team', label: '동행', type: 'multi', options: ['의사', '간호사', '물리치료사', '보호자 동석'] },
+    { key: 'ltc', label: '장기요양등급', type: 'single', carry: true, options: ['미신청', '신청중', '1등급', '2등급', '3등급', '4등급', '5등급', '인지지원', '등급외'] }
+  ]},
+  { id: 'home', title: '주거환경', fields: [
+    { key: 'housing', label: '주거형태', type: 'single', carry: true, options: ['자가', '전세·월세', '공공임대', '고시원·쪽방', '기타'] },
+    { key: 'homeRisk', label: '환경 위험요인', type: 'multi', carry: true, options: ['계단·엘리베이터 없음', '문턱·단차', '욕실 미끄럼', '조명 어두움', '냉난방 불량', '위생 불량', '화재 위험', '해당 없음'] }
+  ]},
+  { id: 'family', title: '가구·돌봄', fields: [
+    { key: 'living', label: '동거형태', type: 'single', carry: true, options: ['독거', '노부부', '자녀 동거', '기타 가족', '시설·기타'] },
+    { key: 'caregiver', label: '주돌봄자', type: 'single', carry: true, options: ['배우자', '자녀', '며느리·사위', '요양보호사', '이웃·지인', '없음'] },
+    { key: 'burden', label: '돌봄부담', type: 'single', options: ['낮음', '보통', '높음', '소진 위기'] }
+  ]},
+  { id: 'econ', title: '경제상태', fields: [
+    { key: 'income', label: '소득구분', type: 'single', carry: true, options: ['기초생활수급', '차상위', '일반'] },
+    { key: 'insurance', label: '의료보장', type: 'single', carry: true, options: ['건강보험', '의료급여 1종', '의료급여 2종'] },
+    { key: 'econIssue', label: '경제적 어려움', type: 'multi', options: ['의료비 부담', '생계 곤란', '공과금 체납', '채무', '해당 없음'] }
+  ]},
+  { id: 'service', title: '이용 중인 서비스', fields: [
+    { key: 'services', label: '이용 서비스', type: 'multi', carry: true, options: ['방문요양', '방문목욕', '방문간호', '주야간보호', '노인맞춤돌봄', '식사·도시락', '복지용구', '장애인활동지원', '치매안심센터', '없음'] }
+  ]},
+  { id: 'needs', title: '상태·욕구', fields: [
+    { key: 'needs', label: '확인된 욕구', type: 'multi', options: ['식사 곤란', '영양 불량', '우울·무기력', '외로움·고립', '인지 저하', '수면 문제', '복약관리 어려움', '병원동행 필요', '이동 불편', '통증 호소', '보호자 상담 필요'] },
+    { key: 'mood', label: '정서상태', type: 'single', options: ['안정', '다소 저하', '우울 의심', '불안·초조'] }
+  ]},
+  { id: 'crisis', title: '위기신호', crisis: true, fields: [
+    { key: 'crisis', label: '위기신호', type: 'multi', options: ['학대 의심', '방임·자기방임', '자살 위험', '돌봄 공백', '응급 상황', '해당 없음'] }
+  ]},
+  { id: 'link', title: '연계·조치', fields: [
+    { key: 'linkage', label: '연계 필요', type: 'multi', options: ['장기요양 등급신청', '노인맞춤돌봄', '주거환경 개선', '긴급복지지원', '기초생활 신청', '의료비 지원', '복지용구', '식사 지원', '치매안심센터', '정신건강복지센터', '행정복지센터', '후원 연계'] },
+    { key: 'linkDone', label: '오늘 조치', type: 'multi', options: ['정보 제공', '신청 안내', '기관 의뢰', '보호자 연락', '팀 공유'] }
+  ]},
+  { id: 'note', title: '상담내용·계획', open: true, fields: [
+    { key: 'memo', label: '상담내용', type: 'memo', phrases: ['특이사항 없음.', '지난 방문 대비 변화 없음.', '보호자 동석하여 상담함.', '서비스 이용에 만족함.', '경제적 부담 호소함.'] },
+    { key: 'plan', label: '향후 계획', type: 'memo', phrases: ['다음 방문 시 재확인.', '연계기관 회신 확인 예정.', '보호자와 통화 예정.'] },
+    { key: 'nextDate', label: '다음 방문 예정일', type: 'date' },
+    { key: 'author', label: '작성자', type: 'text', remember: true }
+  ]}
+];
+
+/* ======================== 이하 동작 코드 ======================== */
+const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+const KEY_DRAFT = 'hv_draft', KEY_QUEUE = 'hv_queue', KEY_AUTHOR = 'hv_author', KEY_START = 'hv_start';
+const ALL_FIELDS = FORM.flatMap(s => s.fields.map(f => Object.assign({ section: s }, f)));
+const $ = id => document.getElementById(id);
+let state = {};
+let patients = [];
+
+function today() {
+  const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+}
+function uid() {
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+/* ---------- 화면 그리기 ---------- */
+function render() {
+  const form = $('form');
+  form.innerHTML = FORM.map(sec => `
+    <section class="card${sec.open ? '' : ' closed'}${sec.crisis ? ' crisis' : ''}" data-sec="${sec.id}">
+      <h2>${esc(sec.title)}<span class="count" id="cnt-${sec.id}"></span></h2>
+      <div class="body">${renderFields(sec.fields)}</div>
+    </section>`).join('');
+
+  form.querySelectorAll('section.card > h2').forEach(h => h.addEventListener('click', () => h.parentElement.classList.toggle('closed')));
+  form.querySelectorAll('.chip').forEach(b => b.addEventListener('click', onChip));
+  form.querySelectorAll('input, textarea').forEach(el => el.addEventListener('input', onInput));
+  form.querySelectorAll('.phrase').forEach(b => b.addEventListener('click', onPhrase));
+  $('f-patient').addEventListener('change', onPatientPicked);
+}
+
+function renderFields(fields) {
+  let html = '', halves = [];
+  const flush = () => { if (halves.length) { html += `<div class="row">${halves.join('')}</div>`; halves = []; } };
+  fields.forEach(f => {
+    const h = renderField(f);
+    if (f.half) { halves.push(h); if (halves.length === 2) flush(); } else { flush(); html += h; }
+  });
+  flush();
+  return html;
+}
+
+function renderField(f) {
+  const req = f.required ? ' <span class="req">*</span>' : '';
+  const id = 'f-' + f.key;
+  if (f.type === 'single' || f.type === 'multi') {
+    return `<div class="field"><span class="label">${esc(f.label)}${req}</span><div class="chips" role="group">` +
+      f.options.map(o => `<button type="button" class="chip" aria-pressed="false" data-key="${f.key}" data-val="${esc(o)}">${esc(o)}</button>`).join('') +
+      `</div></div>`;
+  }
+  if (f.type === 'memo') {
+    return `<div class="field"><label for="${id}">${esc(f.label)}${req}</label>
+      <textarea id="${id}" data-key="${f.key}" placeholder="키보드의 🎤 음성입력을 쓰면 빠릅니다"></textarea>
+      ${f.phrases ? `<div class="phrases">${f.phrases.map(p => `<button type="button" class="phrase" data-key="${f.key}" data-val="${esc(p)}">+ ${esc(p)}</button>`).join('')}</div>` : ''}
+    </div>`;
+  }
+  return `<div class="field"><label for="${id}">${esc(f.label)}${req}</label>
+    <input id="${id}" type="${f.type}" data-key="${f.key}"${f.list ? ` list="${f.list}"` : ''}${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ''}></div>`;
+}
+
+/* ---------- 상태 ↔ 화면 ---------- */
+function paint() {
+  ALL_FIELDS.forEach(f => {
+    const v = state[f.key];
+    if (f.type === 'single' || f.type === 'multi') {
+      const sel = f.type === 'multi' ? (v || []) : (v ? [v] : []);
+      document.querySelectorAll(`.chip[data-key="${f.key}"]`).forEach(b => b.setAttribute('aria-pressed', sel.includes(b.dataset.val)));
+    } else {
+      const el = $('f-' + f.key);
+      if (el && el.value !== (v || '')) el.value = v || '';
+    }
+  });
+  updateCounts();
+}
+
+function updateCounts() {
+  FORM.forEach(sec => {
+    const filled = sec.fields.filter(f => hasValue(state[f.key])).length;
+    const el = $('cnt-' + sec.id);
+    el.textContent = filled ? `${filled}/${sec.fields.length}` : '';
+    el.classList.toggle('done', filled === sec.fields.length);
+  });
+  const crisis = (state.crisis || []).filter(c => c !== '해당 없음');
+  const cb = $('crisisBanner');
+  cb.textContent = crisis.length ? `⚠ 위기신호 체크됨: ${crisis.join(', ')} — 팀 즉시 공유 필요` : '';
+  cb.classList.toggle('show', crisis.length > 0);
+}
+
+function hasValue(v) { return Array.isArray(v) ? v.length > 0 : !!(v && String(v).trim()); }
+
+function onChip(e) {
+  const b = e.currentTarget, key = b.dataset.key, val = b.dataset.val;
+  const f = ALL_FIELDS.find(x => x.key === key);
+  if (f.type === 'single') {
+    state[key] = state[key] === val ? '' : val;
+  } else {
+    let arr = (state[key] || []).slice();
+    const exclusive = /^(해당 없음|없음)$/;
+    if (arr.includes(val)) arr = arr.filter(x => x !== val);
+    else if (exclusive.test(val)) arr = [val];
+    else arr = arr.filter(x => !exclusive.test(x)).concat(val);
+    state[key] = arr;
+  }
+  paint(); saveDraft();
+}
+
+function onInput(e) {
+  const key = e.target.dataset.key;
+  state[key] = e.target.value;
+  if (key === 'author') LS.set(KEY_AUTHOR, e.target.value);
+  updateCounts(); saveDraft();
+}
+
+function onPhrase(e) {
+  const { key, val } = e.currentTarget.dataset;
+  const cur = (state[key] || '').trim();
+  state[key] = cur ? cur + ' ' + val : val;
+  paint(); saveDraft();
+}
+
+/* ---------- 재방문 자동 채우기 ---------- */
+function onPatientPicked() {
+  const name = (state.patient || '').trim();
+  const p = patients.filter(x => x.name === name);
+  if (!p.length) return;
+  const match = p.find(x => x.pid && x.pid === state.pid) || p[p.length - 1];
+  const last = match.last;
+  const carry = ALL_FIELDS.filter(f => f.carry && !hasValue(state[f.key]) && last[f.label]);
+  if (!state.pid && match.pid) state.pid = match.pid;
+  if (!state.visitType) state.visitType = '정기방문';
+  carry.forEach(f => {
+    state[f.key] = f.type === 'multi' ? last[f.label].split(', ').filter(o => f.options.includes(o)) : last[f.label];
+  });
+  paint(); saveDraft();
+  const when = last['방문일'] ? `${last['방문일']} 방문 기록` : '지난 기록';
+  flash('okBanner', `${esc(name)}님 ${esc(when)}에서 ${carry.length}개 항목을 불러왔습니다. 바뀐 부분만 수정하세요.`);
+}
+
+/* ---------- 임시저장 / 타이머 ---------- */
+let draftTimer;
+function saveDraft() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    LS.set(KEY_DRAFT, state);
+    if (!LS.get(KEY_START)) LS.set(KEY_START, Date.now());
+    $('draftState').textContent = '임시저장됨 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  }, 300);
+}
+function tick() {
+  const start = LS.get(KEY_START);
+  const sec = start ? Math.floor((Date.now() - start) / 1000) : 0;
+  const t = $('timer');
+  t.textContent = String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+  t.classList.toggle('warn', sec >= 25 * 60);
+}
+
+function freshState() {
+  return { date: today(), author: LS.get(KEY_AUTHOR, '') };
+}
+
+/* ---------- 기록 만들기 ---------- */
+function fmt(f, v) { return Array.isArray(v) ? v.join(', ') : (v || ''); }
+
+function buildRecord() {
+  return {
+    id: state._id || (state._id = uid()),
+    author: state.author || '',
+    meta: { patient: (state.patient || '').trim(), date: state.date, visitType: state.visitType || '' },
+    crisis: (state.crisis || []).filter(c => c !== '해당 없음'),
+    sections: FORM.map(sec => ({
+      title: sec.title,
+      items: sec.fields.map(f => ({ label: f.label, value: fmt(f, state[f.key]) }))
+    }))
+  };
+}
+
+function summaryText(rec) {
+  const lines = [`[재택의료 사회복지 상담] ${rec.meta.date} ${rec.meta.patient}`];
+  if (rec.crisis.length) lines.push(`⚠ 위기신호: ${rec.crisis.join(', ')}`);
+  rec.sections.forEach(sec => {
+    const items = sec.items.filter(i => i.value && i.label !== '환자명' && i.label !== '방문일');
+    if (!items.length) return;
+    lines.push('', `■ ${sec.title}`);
+    items.forEach(i => lines.push(`- ${i.label}: ${i.value}`));
+  });
+  return lines.join('\n');
+}
+
+function validate() {
+  const missing = ALL_FIELDS.filter(f => f.required && !hasValue(state[f.key])).map(f => f.label);
+  if (missing.length) {
+    showError(`${missing.join(', ')}을(를) 입력해 주세요.`);
+    document.querySelector('[data-sec="basic"]').classList.remove('closed');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return false;
+  }
+  return true;
+}
+
+/* ---------- 전송 / 미전송 대기열 ---------- */
+function callServer(fn, arg) {
+  return new Promise((resolve, reject) => {
+    if (!IS_GAS) {
+      setTimeout(() => fn === 'saveVisit' ? resolve({ ok: true, docUrl: '', demo: true }) : resolve({ patients: [] }), 400);
+      return;
+    }
+    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg);
+  });
+}
+
+async function send(rec) {
+  const res = await callServer('saveVisit', rec);
+  return res;
+}
+
+async function onConfirm() {
+  const rec = buildRecord();
+  $('confirmDlg').close();
+  const btn = $('sendBtn');
+  btn.disabled = true; btn.textContent = '전송 중…';
+  try {
+    const res = await send(rec);
+    afterSent(rec, res);
+  } catch (err) {
+    enqueue(rec);
+    showError('전송하지 못했습니다(' + (err && err.message ? err.message : '네트워크') + '). 기기에 보관했으니 신호가 잡히면 "다시 보내기"를 눌러 주세요.');
+    resetForm(true);
+  } finally {
+    btn.disabled = false; btn.textContent = '드라이브로 전송';
+  }
+}
+
+function afterSent(rec, res) {
+  const link = res && res.docUrl ? ` <a href="${esc(res.docUrl)}" target="_blank" rel="noopener">상담기록지 열기</a>` : '';
+  flash('okBanner', `✅ ${esc(rec.meta.patient)}님 기록을 드라이브에 저장했습니다.${res && res.demo ? ' (미리보기 — 실제 전송 안 됨)' : ''}${link}`, 15000);
+  addPatient(rec);
+  resetForm(true);
+}
+
+function enqueue(rec) {
+  const q = LS.get(KEY_QUEUE, []);
+  if (!q.find(x => x.id === rec.id)) q.push(rec);
+  LS.set(KEY_QUEUE, q);
+  showQueue();
+}
+
+function showQueue() {
+  const q = LS.get(KEY_QUEUE, []);
+  $('queueText').textContent = `📦 미전송 기록 ${q.length}건 (${q.map(r => r.meta.patient).join(', ')})`;
+  $('queueBanner').classList.toggle('show', q.length > 0);
+}
+
+async function flushQueue() {
+  const q = LS.get(KEY_QUEUE, []);
+  if (!q.length) return;
+  $('retryBtn').disabled = true;
+  const left = [];
+  let sent = 0;
+  for (const rec of q) {
+    try { await send(rec); sent++; addPatient(rec); } catch (e) { left.push(rec); }
+  }
+  LS.set(KEY_QUEUE, left);
+  $('retryBtn').disabled = false;
+  showQueue();
+  if (sent) flash('okBanner', `✅ 미전송 기록 ${sent}건을 드라이브에 저장했습니다.`);
+  if (left.length) showError(`${left.length}건은 아직 전송되지 않았습니다. 잠시 후 다시 시도해 주세요.`);
+}
+
+function addPatient(rec) {
+  const last = {};
+  rec.sections.forEach(s => s.items.forEach(i => { if (i.value) last[i.label] = i.value; }));
+  patients.push({ name: rec.meta.patient, pid: last['환자번호'] || '', last });
+  fillPatientList();
+}
+
+function fillPatientList() {
+  const names = [...new Set(patients.map(p => p.name))];
+  $('patientList').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
+}
+
+/* ---------- 기타 UI ---------- */
+function resetForm(silent) {
+  if (!silent && !confirm('입력 중인 내용을 지우고 새 방문을 시작할까요?')) return;
+  state = freshState();
+  LS.del(KEY_DRAFT); LS.del(KEY_START);
+  document.querySelectorAll('section.card').forEach(s => {
+    const sec = FORM.find(x => x.id === s.dataset.sec);
+    s.classList.toggle('closed', !sec.open);
+  });
+  paint(); tick();
+  $('draftState').textContent = '입력 내용은 이 기기에 자동 임시저장됩니다';
+  window.scrollTo({ top: 0 });
+}
+
+function showError(msg) {
+  const b = $('errBanner'); b.textContent = msg; b.classList.add('show');
+  clearTimeout(b._t); b._t = setTimeout(() => b.classList.remove('show'), 12000);
+}
+function flash(id, html, ms) {
+  const b = $(id); b.innerHTML = html; b.classList.add('show');
+  clearTimeout(b._t); b._t = setTimeout(() => b.classList.remove('show'), ms || 6000);
+}
+
+async function copySummary() {
+  const text = summaryText(buildRecord());
+  try { await navigator.clipboard.writeText(text); flash('okBanner', '요약을 복사했습니다. 전자의무기록(EMR)이나 메신저에 붙여넣으세요.'); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); flash('okBanner', '요약을 복사했습니다.'); } catch (e2) { showError('복사하지 못했습니다.'); }
+    ta.remove();
+  }
+}
+
+/* ---------- 시작 ---------- */
+function init() {
+  render();
+  state = Object.assign(freshState(), LS.get(KEY_DRAFT, {}));
+  paint();
+  if (hasValue(state.patient)) flash('okBanner', '작성 중이던 기록을 불러왔습니다.');
+  if (!IS_GAS) $('demoBanner').classList.add('show');
+  showQueue();
+  tick(); setInterval(tick, 1000);
+
+  $('sendBtn').addEventListener('click', () => {
+    if (!validate()) return;
+    $('summary').textContent = summaryText(buildRecord());
+    $('confirmDlg').showModal();
+  });
+  $('confirmBtn').addEventListener('click', onConfirm);
+  $('cancelBtn').addEventListener('click', () => $('confirmDlg').close());
+  $('resetBtn').addEventListener('click', () => resetForm(false));
+  $('copyBtn').addEventListener('click', copySummary);
+  $('retryBtn').addEventListener('click', flushQueue);
+  window.addEventListener('online', flushQueue);
+
+  if (IS_GAS) {
+    callServer('getInitData').then(d => {
+      patients = d.patients || [];
+      fillPatientList();
+      flushQueue();
+    }).catch(err => showError('드라이브 연결 확인 필요: ' + (err && err.message ? err.message : err)));
+  }
+}
+init();
+</script>
+</body>
+</html>

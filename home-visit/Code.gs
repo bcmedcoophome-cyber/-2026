@@ -213,7 +213,8 @@ function createDoc_(folder, record) {
   const head = body.appendTable([
     ['환자명', m.patient, '생년월일', birth],
     ['방문일', m.date, '방문유형', m.visitType || ''],
-    ['장기요양등급', v['장기요양등급'] || '', '장기요양기관', v['장기요양기관명'] || '']
+    ['장기요양등급', v['장기요양등급'] || '', '장기요양기관', v['장기요양기관명'] || ''],
+    ['장애정도', v['장애정도'] || '', '장애유형', v['장애유형'] || '']
   ]);
   head.setBorderColor('#9aa0a6');
   for (let r = 0; r < head.getNumRows(); r++) {
@@ -226,7 +227,7 @@ function createDoc_(folder, record) {
     warn.editAsText().setForegroundColor('#c5221f');
   }
 
-  const inHead = ['환자명', '생년월일', '방문일', '방문유형', '장기요양등급', '장기요양기관명', '작성자'];
+  const inHead = ['환자명', '생년월일', '방문일', '방문유형', '장기요양등급', '장기요양기관명', '장애정도', '장애유형', '작성자'];
   (record.sections || []).forEach(sec => {
     const rows = (sec.items || []).filter(it => it.value && inHead.indexOf(it.label) < 0)
       .map(it => [it.label, String(it.value)]);

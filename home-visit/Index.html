@@ -148,7 +148,9 @@ const FORM = [
     { key: 'author', label: '작성자', type: 'text', required: true, half: true, remember: true },
     { key: 'visitType', label: '방문유형', type: 'single', options: ['첫방문', '정기방문', '수시방문', '임종돌봄', '통합돌봄'] },
     { key: 'ltc', label: '장기요양등급', type: 'single', carry: true, options: ['미신청', '신청중', '1등급', '2등급', '3등급', '4등급', '5등급', '인지지원', '등급외'] },
-    { key: 'ltcAgency', label: '장기요양기관명', type: 'text', carry: true, placeholder: '이용 중인 기관 (예: ○○재가복지센터)' }
+    { key: 'ltcAgency', label: '장기요양기관명', type: 'text', carry: true, placeholder: '이용 중인 기관 (예: ○○재가복지센터)' },
+    { key: 'disability', label: '장애정도', type: 'single', carry: true, options: ['해당 없음', '중증', '경증'] },
+    { key: 'disabilityType', label: '장애유형', type: 'text', carry: true, placeholder: '예: 지체장애, 뇌병변장애, 시각장애' }
   ]},
   { id: 'home', title: '주거환경', fields: [
     { key: 'housing', label: '주거형태', type: 'single', carry: true, options: ['자가', '전세·월세', '공공임대', '고시원·쪽방', '기타'] },

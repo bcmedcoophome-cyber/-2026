@@ -2,7 +2,7 @@
   "name": "재택의료 방문상담",
   "short_name": "재택방문",
   "description": "재택의료 사회복지 방문상담 체크리스트",
-  "start_url": "./?go",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#141b4d",

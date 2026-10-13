@@ -6,6 +6,8 @@
 <title>재택방문</title>
 <meta name="theme-color" content="#141b4d">
 <meta name="apple-mobile-web-app-title" content="재택방문">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -13,7 +15,8 @@
   /*
    * 홈 화면 아이콘용 실행 페이지.
    * 앱(Apps Script 웹앱) 주소는 저장소에 넣지 않고, 각 휴대폰에만 기억합니다.
-   * ?go 로 열리면(홈 화면 아이콘) 저장된 주소로 바로 이동합니다.
+   * 홈 화면 아이콘으로 열렸을 때(아이폰: 독립 실행 화면, 안드로이드: ?go)만 앱으로 이동합니다.
+   * 사파리 탭에서는 이동하지 않아야 아이폰 '홈 화면에 추가'가 구글 아이콘을 가져가지 않습니다.
    */
   var KEY = 'hv_exec_id';
   function get() { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
@@ -23,7 +26,9 @@
   if (hashId) set(hashId);
   var id = hashId || get();
   var params = new URLSearchParams(location.search);
-  if (id && params.has('go') && !params.has('setup')) location.replace(execUrl(id));
+  var standalone = window.navigator.standalone === true ||
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  if (id && (standalone || params.has('go')) && !params.has('setup')) location.replace(execUrl(id));
 </script>
 <style>
   :root { --bg: #f3f5fb; --card: #fff; --ink: #161c3a; --muted: #5d6480; --line: #dde1ef; --brand: #2e3a8c; --brand-ink: #fff; --ok: #2e3a8c; --err: #c5221f; }
@@ -72,11 +77,12 @@
     <p class="msg ok">✅ 앱 주소를 이 휴대폰에 기억했습니다.</p>
     <label>2. 홈 화면에 추가하기</label>
     <ol>
+      <li><b>이 화면 그대로</b>(앱을 열지 말고) 추가하세요.</li>
+      <li><b>아이폰(사파리)</b>: 아래 공유 버튼 <b>⬆</b> → <b>홈 화면에 추가</b> → 아이콘이 남색 집인지 확인 → 추가</li>
       <li><b>안드로이드(크롬)</b>: 오른쪽 위 ⋮ → <b>홈 화면에 추가</b></li>
-      <li><b>아이폰(사파리)</b>: 아래 공유 버튼 <b>⬆</b> → <b>홈 화면에 추가</b></li>
     </ol>
     <p class="small">홈 화면의 남색 집 아이콘을 누르면 바로 방문상담 앱이 열립니다.</p>
-    <a class="btn" id="openBtn" href="#">지금 앱 열기</a>
+    <a class="btn" id="openBtn" href="#" style="background:transparent;color:var(--brand);border:1px solid var(--line)">홈 화면 추가 없이 지금 앱 열기</a>
   </section>
 
   <p class="small">앱 주소는 이 휴대폰에만 저장되고 다른 곳으로 보내지 않습니다. 주소가 바뀌었으면 <a href="?setup">여기</a>에서 다시 붙여넣으세요.</p>
@@ -89,8 +95,9 @@
   function showReady(id) {
     document.getElementById('ready').hidden = false;
     document.getElementById('openBtn').href = execUrl(id);
-    // 아이폰은 '홈 화면에 추가' 때 지금 주소를 그대로 저장하므로, 바로 실행되는 주소로 바꿔 둠
-    history.replaceState(null, '', '?go#' + id);
+    // 아이폰 홈 화면 앱은 사파리와 저장공간이 달라서, 주소의 # 뒤에 앱 ID를 붙여 둠
+    // (?go 는 붙이지 않음: 붙이면 '홈 화면에 추가' 때 구글 페이지로 넘어가 구글 아이콘이 됨)
+    history.replaceState(null, '', location.pathname + '#' + id);
   }
   document.getElementById('saveBtn').addEventListener('click', function () {
     var id = parseId(document.getElementById('url').value);

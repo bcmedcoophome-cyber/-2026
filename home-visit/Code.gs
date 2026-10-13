@@ -3,7 +3,8 @@
  *
  * 휴대폰에서 체크한 상담 내용을 받아
  *   1) [저장] 시 구글 시트(방문기록)에 '임시저장'으로 기록하고
- *   2) [전송] 시 같은 줄을 '전송완료'로 바꾸고, 방문 건마다 구글 문서 「방문기록지_환자명_작성자_날짜」를 지정한 드라이브 폴더에 만듭니다.
+ *   2) [전송] 시 같은 줄을 '전송완료'로 바꾸고, 방문 건마다 구글 문서 「방문기록지_환자명_작성자_날짜」를
+ *      지정한 드라이브 폴더 안의 작성자별/월별 폴더(예: 김민정/2026-10)에 만듭니다.
  *
  * 설치 방법은 같은 폴더의 README.md를 보세요.
  */
@@ -187,7 +188,16 @@ function safeCell_(v) {
   return /^[=+\-@]/.test(s) ? "'" + s : s;
 }
 
-/** 방문 건별 방문기록지(구글 문서)를 지정 폴더에 만듦: 방문기록지_환자명_작성자_날짜 */
+/** 하위 폴더를 이름으로 찾고, 없으면 만듦 */
+function getSubFolder_(parent, name) {
+  const it = parent.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parent.createFolder(name);
+}
+
+/**
+ * 방문기록지(구글 문서)를 작성자별·월별 폴더에 만듦
+ *   지정 폴더 / 김민정 / 2026-10 / 방문기록지_환자명_작성자_날짜
+ */
 function createDoc_(folder, record) {
   const m = record.meta;
   const v = {};
@@ -249,7 +259,9 @@ function createDoc_(folder, record) {
   sign.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
   doc.saveAndClose();
 
-  DriveApp.getFileById(doc.getId()).moveTo(folder);
+  const authorFolder = getSubFolder_(folder, clean(record.author) || '작성자미상');
+  const monthFolder = getSubFolder_(authorFolder, String(m.date).slice(0, 7));
+  DriveApp.getFileById(doc.getId()).moveTo(monthFolder);
   return doc.getUrl();
 }
 

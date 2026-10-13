@@ -129,11 +129,12 @@
 const FORM = [
   { id: 'basic', title: '기본정보', open: true, fields: [
     { key: 'patient', label: '환자명', type: 'text', required: true, list: 'patientList', half: true },
-    { key: 'pid', label: '환자번호', type: 'text', half: true, placeholder: '선택' },
-    { key: 'date', label: '방문일', type: 'date', required: true },
-    { key: 'visitType', label: '방문유형', type: 'single', options: ['초기평가', '정기방문', '수시방문', '퇴원 후', '임종기'] },
-    { key: 'team', label: '동행', type: 'multi', options: ['의사', '간호사', '물리치료사', '보호자 동석'] },
-    { key: 'ltc', label: '장기요양등급', type: 'single', carry: true, options: ['미신청', '신청중', '1등급', '2등급', '3등급', '4등급', '5등급', '인지지원', '등급외'] }
+    { key: 'birth', label: '생년월일', type: 'text', half: true, placeholder: '예: 19450312', numeric: true },
+    { key: 'date', label: '방문일', type: 'date', required: true, half: true },
+    { key: 'author', label: '작성자', type: 'text', half: true, remember: true },
+    { key: 'visitType', label: '방문유형', type: 'single', options: ['첫방문', '정기방문', '수시방문', '임종돌봄', '통합돌봄'] },
+    { key: 'ltc', label: '장기요양등급', type: 'single', carry: true, options: ['미신청', '신청중', '1등급', '2등급', '3등급', '4등급', '5등급', '인지지원', '등급외'] },
+    { key: 'ltcAgency', label: '장기요양기관명', type: 'text', carry: true, placeholder: '이용 중인 기관 (예: ○○재가복지센터)' }
   ]},
   { id: 'home', title: '주거환경', fields: [
     { key: 'housing', label: '주거형태', type: 'single', carry: true, options: ['자가', '전세·월세', '공공임대', '고시원·쪽방', '기타'] },
@@ -165,9 +166,7 @@ const FORM = [
   ]},
   { id: 'note', title: '상담내용·계획', open: true, fields: [
     { key: 'memo', label: '상담내용', type: 'memo', phrases: ['특이사항 없음.', '지난 방문 대비 변화 없음.', '보호자 동석하여 상담함.', '서비스 이용에 만족함.', '경제적 부담 호소함.'] },
-    { key: 'plan', label: '향후 계획', type: 'memo', phrases: ['다음 방문 시 재확인.', '연계기관 회신 확인 예정.', '보호자와 통화 예정.'] },
-    { key: 'nextDate', label: '다음 방문 예정일', type: 'date' },
-    { key: 'author', label: '작성자', type: 'text', remember: true }
+    { key: 'plan', label: '향후 계획', type: 'memo', phrases: ['다음 방문 시 재확인.', '연계기관 회신 확인 예정.', '보호자와 통화 예정.'] }
   ]}
 ];
 
@@ -235,7 +234,7 @@ function renderField(f) {
     </div>`;
   }
   return `<div class="field"><label for="${id}">${esc(f.label)}${req}</label>
-    <input id="${id}" type="${f.type}" data-key="${f.key}"${f.list ? ` list="${f.list}"` : ''}${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ''}></div>`;
+    <input id="${id}" type="${f.type}" data-key="${f.key}"${f.list ? ` list="${f.list}"` : ''}${f.numeric ? ' inputmode="numeric" maxlength="10"' : ''}${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ''}></div>`;
 }
 
 /* ---------- 상태 ↔ 화면 ---------- */
@@ -286,6 +285,7 @@ function onChip(e) {
 
 function onInput(e) {
   const key = e.target.dataset.key;
+  if (key === 'birth') e.target.value = formatBirth(e.target.value);
   state[key] = e.target.value;
   if (key === 'author') LS.set(KEY_AUTHOR, e.target.value);
   updateCounts(); saveDraft();
@@ -298,15 +298,21 @@ function onPhrase(e) {
   paint(); saveDraft();
 }
 
+/* 19450312 → 1945-03-12 */
+function formatBirth(v) {
+  const d = v.replace(/\D/g, '').slice(0, 8);
+  return [d.slice(0, 4), d.slice(4, 6), d.slice(6, 8)].filter(Boolean).join('-');
+}
+
 /* ---------- 재방문 자동 채우기 ---------- */
 function onPatientPicked() {
   const name = (state.patient || '').trim();
   const p = patients.filter(x => x.name === name);
   if (!p.length) return;
-  const match = p.find(x => x.pid && x.pid === state.pid) || p[p.length - 1];
+  const match = p.filter(x => x.birth && x.birth === state.birth).pop() || p[p.length - 1];
   const last = match.last;
   const carry = ALL_FIELDS.filter(f => f.carry && !hasValue(state[f.key]) && last[f.label]);
-  if (!state.pid && match.pid) state.pid = match.pid;
+  if (!state.birth && match.birth) state.birth = match.birth;
   if (!state.visitType) state.visitType = '정기방문';
   carry.forEach(f => {
     state[f.key] = f.type === 'multi' ? last[f.label].split(', ').filter(o => f.options.includes(o)) : last[f.label];
@@ -449,13 +455,14 @@ async function flushQueue() {
 function addPatient(rec) {
   const last = {};
   rec.sections.forEach(s => s.items.forEach(i => { if (i.value) last[i.label] = i.value; }));
-  patients.push({ name: rec.meta.patient, pid: last['환자번호'] || '', last });
+  patients.push({ name: rec.meta.patient, birth: last['생년월일'] || '', last });
   fillPatientList();
 }
 
 function fillPatientList() {
-  const names = [...new Set(patients.map(p => p.name))];
-  $('patientList').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
+  const seen = {};
+  const opts = patients.slice().reverse().filter(p => !seen[p.name + p.birth] && (seen[p.name + p.birth] = 1));
+  $('patientList').innerHTML = opts.map(p => `<option value="${esc(p.name)}"${p.birth ? ` label="${esc(p.birth)}"` : ''}>`).join('');
 }
 
 /* ---------- 기타 UI ---------- */

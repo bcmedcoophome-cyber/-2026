@@ -39,14 +39,14 @@ function getInitData() {
     const values = sh.getRange(1, 1, lastRow, sh.getLastColumn()).getDisplayValues();
     const header = values[0];
     const nameCol = header.indexOf('환자명');
-    const pidCol = header.indexOf('환자번호');
+    const birthCol = header.indexOf('생년월일');
     for (let r = 1; r < values.length; r++) {
       const name = nameCol >= 0 ? values[r][nameCol] : '';
       if (!name) continue;
-      const pid = pidCol >= 0 ? values[r][pidCol] : '';
+      const birth = birthCol >= 0 ? values[r][birthCol] : '';
       const last = {};
       header.forEach((h, i) => { if (h && values[r][i] !== '') last[h] = values[r][i]; });
-      patients[name + '|' + pid] = { name: name, pid: pid, last: last }; // 아래 행일수록 최신
+      patients[name + '|' + birth] = { name: name, birth: birth, last: last }; // 아래 행일수록 최신
     }
   }
   return {

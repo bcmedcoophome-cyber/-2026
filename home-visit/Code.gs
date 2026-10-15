@@ -10,6 +10,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
+const APP_VERSION = '2026-10-15'; // 휴대폰 화면 아래에 표시됨: 이 날짜가 보이면 최신 코드
 // 방문기록지를 저장할 구글 드라이브 폴더 (「환자별 방문기록지 (사회복지)」)
 // 폴더 주소 https://drive.google.com/drive/folders/ 뒤의 ID 부분입니다.
 const TARGET_FOLDER_ID = '1LA6KMNOLoPhVf8H1qza6v6voN-U-PfeG';
@@ -61,7 +62,8 @@ function getInitData() {
     patients: Object.keys(patients).map(k => patients[k]),
     sheetUrl: ss.getUrl(),
     folderUrl: folder.getUrl(),
-    user: Session.getActiveUser().getEmail() || ''
+    user: Session.getActiveUser().getEmail() || '',
+    version: APP_VERSION
   };
 }
 
@@ -207,61 +209,67 @@ function createDoc_(folder, record) {
   const name = ['방문기록지', clean(m.patient), clean(record.author) || '작성자미상', m.date].join('_');
 
   const doc = DocumentApp.create(name);
-  const body = doc.getBody();
-  body.setMarginTop(36);
-  body.setMarginBottom(36);
-  body.setMarginLeft(44);
-  body.setMarginRight(44);
+  try {
+    const body = doc.getBody();
+    body.setMarginTop(36);
+    body.setMarginBottom(36);
+    body.setMarginLeft(44);
+    body.setMarginRight(44);
 
-  // 주의: Paragraph.setText()는 아무것도 돌려주지 않으므로 이어 쓰지(체이닝) 않음
-  const title = body.getParagraphs()[0];
-  title.setText(DOC_TITLE);
-  title.setHeading(DocumentApp.ParagraphHeading.TITLE);
-  title.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+    // 주의: Paragraph.setText()는 아무것도 돌려주지 않으므로 이어 쓰지(체이닝) 않음
+    const title = body.getParagraphs()[0];
+    title.setText(DOC_TITLE);
+    title.setHeading(DocumentApp.ParagraphHeading.TITLE);
+    title.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
 
-  // 머리 표: 인적사항
-  const head = body.appendTable([
-    ['환자명', m.patient, '생년월일', birth],
-    ['방문일', m.date, '방문유형', m.visitType || ''],
-    ['장기요양등급', v['장기요양등급'] || '', '장기요양기관', v['장기요양기관명'] || ''],
-    ['장애정도', v['장애정도'] || '', '장애유형', v['장애유형'] || '']
-  ]);
-  head.setBorderColor('#9aa0a6');
-  for (let r = 0; r < head.getNumRows(); r++) {
-    [0, 2].forEach(c => styleLabelCell_(head.getRow(r).getCell(c)));
-  }
-
-  if (record.crisis && record.crisis.length) {
-    const warn = body.appendParagraph('⚠ 위기신호: ' + record.crisis.join(', '));
-    warn.editAsText().setBold(true);
-    warn.editAsText().setForegroundColor('#c5221f');
-  }
-
-  const inHead = ['환자명', '생년월일', '방문일', '방문유형', '장기요양등급', '장기요양기관명', '장애정도', '장애유형', '작성자'];
-  (record.sections || []).forEach(sec => {
-    const rows = (sec.items || []).filter(it => it.value && inHead.indexOf(it.label) < 0)
-      .map(it => [it.label, String(it.value)]);
-    if (!rows.length) return;
-    const h = body.appendParagraph('■ ' + sec.title);
-    h.setHeading(DocumentApp.ParagraphHeading.HEADING3);
-    const table = body.appendTable(rows);
-    table.setBorderColor('#9aa0a6');
-    for (let i = 0; i < table.getNumRows(); i++) {
-      const cell = table.getRow(i).getCell(0);
-      cell.setWidth(110);
-      styleLabelCell_(cell);
+    // 머리 표: 인적사항
+    const head = body.appendTable([
+      ['환자명', m.patient, '생년월일', birth],
+      ['방문일', m.date, '방문유형', m.visitType || ''],
+      ['장기요양등급', v['장기요양등급'] || '', '장기요양기관', v['장기요양기관명'] || ''],
+      ['장애정도', v['장애정도'] || '', '장애유형', v['장애유형'] || '']
+    ]);
+    head.setBorderColor('#9aa0a6');
+    for (let r = 0; r < head.getNumRows(); r++) {
+      [0, 2].forEach(c => styleLabelCell_(head.getRow(r).getCell(c)));
     }
-  });
 
-  const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
-  body.appendParagraph('');
-  const sign = body.appendParagraph('작성일시: ' + now + '        작성자: ' + (record.author || '') + '  (서명)');
-  sign.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
-  doc.saveAndClose();
+    if (record.crisis && record.crisis.length) {
+      const warn = body.appendParagraph('⚠ 위기신호: ' + record.crisis.join(', '));
+      warn.editAsText().setBold(true);
+      warn.editAsText().setForegroundColor('#c5221f');
+    }
 
-  const authorFolder = getSubFolder_(folder, clean(record.author) || '작성자미상');
-  const monthFolder = getSubFolder_(authorFolder, String(m.date).slice(0, 7));
-  DriveApp.getFileById(doc.getId()).moveTo(monthFolder);
+    const inHead = ['환자명', '생년월일', '방문일', '방문유형', '장기요양등급', '장기요양기관명', '장애정도', '장애유형', '작성자'];
+    (record.sections || []).forEach(sec => {
+      const rows = (sec.items || []).filter(it => it.value && inHead.indexOf(it.label) < 0)
+        .map(it => [it.label, String(it.value)]);
+      if (!rows.length) return;
+      const h = body.appendParagraph('■ ' + sec.title);
+      h.setHeading(DocumentApp.ParagraphHeading.HEADING3);
+      const table = body.appendTable(rows);
+      table.setBorderColor('#9aa0a6');
+      for (let i = 0; i < table.getNumRows(); i++) {
+        const cell = table.getRow(i).getCell(0);
+        cell.setWidth(110);
+        styleLabelCell_(cell);
+      }
+    });
+
+    const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+    body.appendParagraph('');
+    const sign = body.appendParagraph('작성일시: ' + now + '        작성자: ' + (record.author || '') + '  (서명)');
+    sign.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+    doc.saveAndClose();
+
+    const authorFolder = getSubFolder_(folder, clean(record.author) || '작성자미상');
+    const monthFolder = getSubFolder_(authorFolder, String(m.date).slice(0, 7));
+    DriveApp.getFileById(doc.getId()).moveTo(monthFolder);
+  } catch (e) {
+    // 실패하면 빈 문서가 내 드라이브에 남지 않도록 휴지통으로
+    try { DriveApp.getFileById(doc.getId()).setTrashed(true); } catch (e2) {}
+    throw e;
+  }
   return doc.getUrl();
 }
 

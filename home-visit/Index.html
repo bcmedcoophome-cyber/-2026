@@ -613,6 +613,8 @@ function init() {
   if (IS_GAS) {
     callServer('getInitData').then(d => {
       patients = d.patients || [];
+      $('draftState').dataset.version = d.version || '옛날 버전';
+      $('draftState').textContent = '저장: 휴대폰+시트에 임시저장 · 전송: 방문기록지 만들기 · 버전 ' + (d.version || '옛날 버전');
       fillPatientList();
       flushQueue();
     }).catch(err => showError('드라이브 연결 확인 필요: ' + (err && err.message ? err.message : err)));

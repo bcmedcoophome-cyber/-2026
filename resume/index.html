@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>이력서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1b1f24;
+    --muted: #5b6470;
+    --line: #9aa3ad;
+    --head: #eef1f5;
+    --accent: #1f3a5f;
+    --page: #ffffff;
+    --bg: #e9ecf0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Noto Sans KR", "Malgun Gothic", sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .toolbar {
+    max-width: 210mm;
+    margin: 16px auto 0;
+    padding: 0 16px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    color: var(--muted);
+  }
+  .toolbar button {
+    font: inherit;
+    padding: 6px 14px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .toolbar button.ghost { background: transparent; color: var(--accent); }
+  .page {
+    width: 210mm;
+    max-width: calc(100% - 32px);
+    min-height: 297mm;
+    margin: 12px auto 32px;
+    padding: 16mm 15mm;
+    background: var(--page);
+    box-shadow: 0 2px 12px rgba(0,0,0,.12);
+  }
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    letter-spacing: 1.2em;
+    padding-left: 1.2em;
+    margin: 0 0 18px;
+    font-weight: 700;
+  }
+  h2 {
+    font-size: 14px;
+    margin: 18px 0 6px;
+    padding-left: 8px;
+    border-left: 4px solid var(--accent);
+    color: var(--accent);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    border-top: 2px solid var(--ink);
+  }
+  th, td {
+    border: 1px solid var(--line);
+    padding: 6px 8px;
+    vertical-align: middle;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+  th {
+    background: var(--head);
+    font-weight: 500;
+    text-align: center;
+    white-space: nowrap;
+  }
+  td { min-height: 28px; height: 30px; }
+  [contenteditable]:focus { outline: 2px solid #7aa7e0; outline-offset: -2px; background: #f7fbff; }
+  [contenteditable]:empty::before { content: attr(data-ph); color: #b3bac3; }
+  .photo {
+    width: 30mm;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 0;
+    cursor: pointer;
+    position: relative;
+  }
+  .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo input { display: none; }
+  .intro td { height: auto; min-height: 120px; vertical-align: top; }
+  .intro .box { min-height: 110px; white-space: pre-wrap; }
+  .sign {
+    margin-top: 28px;
+    text-align: center;
+    line-height: 2.2;
+  }
+  .sign .date { letter-spacing: .1em; }
+  .sign .name { margin-top: 8px; }
+  .sign span[contenteditable] { display: inline-block; min-width: 3em; border-bottom: 1px solid var(--line); text-align: center; }
+  .row-actions { text-align: right; margin-top: 4px; }
+  .row-actions button {
+    font: inherit; font-size: 12px;
+    padding: 2px 10px;
+    border: 1px solid var(--line);
+    background: #fff; color: var(--muted);
+    border-radius: 3px; cursor: pointer;
+  }
+
+  @media (max-width: 760px) {
+    .page { padding: 16px; min-height: 0; }
+    body { font-size: 12px; }
+    h1 { font-size: 22px; letter-spacing: .6em; padding-left: .6em; }
+    .photo { width: 22mm; }
+  }
+  @page { size: A4; margin: 12mm; }
+  @media print {
+    body { background: #fff; font-size: 11.5px; }
+    .toolbar, .row-actions { display: none; }
+    .page { box-shadow: none; margin: 0; padding: 0; width: auto; max-width: none; min-height: 0; }
+    [contenteditable]:empty::before { content: ""; }
+    th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    table, .sign { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <button onclick="window.print()">인쇄 / PDF 저장</button>
+  <button class="ghost" onclick="clearAll()">모두 지우기</button>
+  <span>칸을 눌러 바로 입력하세요. 입력 내용은 이 브라우저에 자동 저장됩니다.</span>
+</div>
+
+<main class="page" id="resume">
+  <h1>이력서</h1>
+
+  <!-- 인적사항 -->
+  <table>
+    <colgroup><col style="width:30mm"><col style="width:18%"><col><col style="width:18%"><col></colgroup>
+    <tr>
+      <td class="photo" rowspan="5" onclick="this.querySelector('input').click()">
+        <span id="photoText">사진<br>(3×4cm)<br>클릭해서 추가</span>
+        <input type="file" accept="image/*" onchange="setPhoto(this)">
+      </td>
+      <th>성명(한글)</th><td contenteditable data-k="name"></td>
+      <th>성명(영문)</th><td contenteditable data-k="nameEn"></td>
+    </tr>
+    <tr>
+      <th>생년월일</th><td contenteditable data-k="birth" data-ph="0000.00.00"></td>
+      <th>성별</th><td contenteditable data-k="gender"></td>
+    </tr>
+    <tr>
+      <th>휴대전화</th><td contenteditable data-k="phone" data-ph="010-0000-0000"></td>
+      <th>이메일</th><td contenteditable data-k="email"></td>
+    </tr>
+    <tr>
+      <th>주소</th><td colspan="3" contenteditable data-k="addr"></td>
+    </tr>
+    <tr>
+      <th>지원분야</th><td contenteditable data-k="apply"></td>
+      <th>희망연봉</th><td contenteditable data-k="salary" data-ph="회사 내규에 따름"></td>
+    </tr>
+  </table>
+
+  <h2>학력사항</h2>
+  <table data-section="edu">
+    <colgroup><col style="width:28%"><col style="width:28%"><col><col style="width:14%"></colgroup>
+    <tr><th>기간</th><th>학교명</th><th>전공</th><th>구분</th></tr>
+  </table>
+  <div class="row-actions"><button onclick="addRow('edu')">+ 행 추가</button></div>
+
+  <h2>경력사항</h2>
+  <table data-section="career">
+    <colgroup><col style="width:24%"><col style="width:22%"><col style="width:16%"><col></colgroup>
+    <tr><th>근무기간</th><th>회사명</th><th>직위</th><th>담당업무</th></tr>
+  </table>
+  <div class="row-actions"><button onclick="addRow('career')">+ 행 추가</button></div>
+
+  <h2>자격증 · 면허</h2>
+  <table data-section="cert">
+    <colgroup><col style="width:24%"><col><col style="width:30%"></colgroup>
+    <tr><th>취득일</th><th>자격증명</th><th>발행기관</th></tr>
+  </table>
+  <div class="row-actions"><button onclick="addRow('cert')">+ 행 추가</button></div>
+
+  <h2>교육 · 연수 / 대외활동</h2>
+  <table data-section="train">
+    <colgroup><col style="width:24%"><col><col style="width:30%"></colgroup>
+    <tr><th>기간</th><th>내용</th><th>기관</th></tr>
+  </table>
+  <div class="row-actions"><button onclick="addRow('train')">+ 행 추가</button></div>
+
+  <h2>어학 · 컴퓨터 활용</h2>
+  <table data-section="skill">
+    <colgroup><col style="width:24%"><col><col style="width:30%"></colgroup>
+    <tr><th>구분</th><th>내용 (시험명·점수 / 프로그램)</th><th>수준</th></tr>
+  </table>
+  <div class="row-actions"><button onclick="addRow('skill')">+ 행 추가</button></div>
+
+  <h2>병역 · 기타</h2>
+  <table>
+    <colgroup><col style="width:14%"><col><col style="width:14%"><col><col style="width:14%"><col></colgroup>
+    <tr>
+      <th>병역</th><td contenteditable data-k="mil" data-ph="군필/미필/면제/해당없음"></td>
+      <th>보훈</th><td contenteditable data-k="vet" data-ph="대상/비대상"></td>
+      <th>장애</th><td contenteditable data-k="dis" data-ph="대상/비대상"></td>
+    </tr>
+  </table>
+
+  <h2>자기소개</h2>
+  <table class="intro">
+    <tr><td><div class="box" contenteditable data-k="intro" data-ph="성장과정, 성격의 장단점, 지원동기, 입사 후 포부 등을 간단히 적어주세요."></div></td></tr>
+  </table>
+
+  <div class="sign">
+    <div>위에 기재한 사항은 사실과 틀림이 없습니다.</div>
+    <div class="date">
+      <span contenteditable data-k="y"></span> 년
+      <span contenteditable data-k="m"></span> 월
+      <span contenteditable data-k="d"></span> 일
+    </div>
+    <div class="name">지원자 : <span contenteditable data-k="signName" style="min-width:6em"></span> (인)</div>
+  </div>
+</main>
+
+<script>
+  const KEY = 'resume-template-v1';
+  const DEFAULT_ROWS = { edu: 3, career: 3, cert: 3, train: 2, skill: 2 };
+  let state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { state = {}; }
+
+  function save() {
+    const data = { fields: {}, rows: {}, photo: state.photo || null };
+    document.querySelectorAll('[data-k]').forEach(el => data.fields[el.dataset.k] = el.innerText);
+    document.querySelectorAll('table[data-section]').forEach(t => {
+      data.rows[t.dataset.section] = [...t.querySelectorAll('tr.data')].map(tr =>
+        [...tr.cells].map(td => td.innerText));
+    });
+    state = data;
+    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {}
+  }
+
+  function addRow(section, values) {
+    const t = document.querySelector(`table[data-section="${section}"]`);
+    const cols = t.rows[0].cells.length;
+    const tr = t.insertRow();
+    tr.className = 'data';
+    for (let i = 0; i < cols; i++) {
+      const td = tr.insertCell();
+      td.contentEditable = true;
+      td.innerText = values ? (values[i] || '') : '';
+    }
+  }
+
+  function setPhoto(input) {
+    const f = input.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => { state.photo = r.result; showPhoto(); save(); };
+    r.readAsDataURL(f);
+  }
+  function showPhoto() {
+    const cell = document.querySelector('.photo');
+    const old = cell.querySelector('img');
+    if (old) old.remove();
+    document.getElementById('photoText').style.display = state.photo ? 'none' : '';
+    if (state.photo) {
+      const img = new Image();
+      img.src = state.photo;
+      cell.prepend(img);
+    }
+  }
+
+  function clearAll() {
+    if (!confirm('입력한 내용을 모두 지울까요?')) return;
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    location.reload();
+  }
+
+  // 초기화
+  const fields = state.fields || {};
+  document.querySelectorAll('[data-k]').forEach(el => { if (fields[el.dataset.k]) el.innerText = fields[el.dataset.k]; });
+  Object.entries(DEFAULT_ROWS).forEach(([s, n]) => {
+    const saved = (state.rows || {})[s];
+    if (saved && saved.length) saved.forEach(v => addRow(s, v));
+    else for (let i = 0; i < n; i++) addRow(s);
+  });
+  showPhoto();
+  document.getElementById('resume').addEventListener('input', save);
+  document.querySelectorAll('.row-actions button').forEach(b => b.addEventListener('click', save));
+</script>
+</body>
+</html>

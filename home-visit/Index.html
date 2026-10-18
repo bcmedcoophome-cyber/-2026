@@ -47,7 +47,7 @@
   .field { margin-bottom: 14px; }
   .field > label, .field > .label { display: block; font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
   .req { color: var(--danger); }
-  input[type=text], input[type=date], input[type=number], textarea {
+  input[type=text], input[type=date], input[type=number], input[type=tel], textarea {
     width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
     border-radius: 10px; padding: 11px 12px; }
   textarea { min-height: 96px; resize: vertical; }
@@ -79,8 +79,26 @@
   .saved-item .who small { display: block; color: var(--muted); font-size: 12px; }
   #savedList { max-height: 60vh; overflow: auto; }
   #savedList:empty::before { content: "저장된 기록이 없습니다."; display: block; padding: 16px; color: var(--muted); }
-  #draftState { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
+  #draftState, #cState { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
 
+  /* 탭 */
+  .tabs { position: sticky; top: 49px; z-index: 9; display: flex; background: var(--card); border-bottom: 1px solid var(--line); }
+  .tabs button { flex: 1; font: inherit; font-weight: 700; padding: 12px 0; border: 0; background: transparent; color: var(--muted); border-bottom: 3px solid transparent; cursor: pointer; }
+  .tabs button[aria-selected=true] { color: var(--brand); border-bottom-color: var(--brand); }
+  [hidden] { display: none !important; }
+  /* 동의서 */
+  .clause { font-size: 14px; line-height: 1.55; background: var(--bg); border-radius: 10px; padding: 10px 12px; margin: 0 0 10px; }
+  .clause p { margin: 0 0 4px; padding-left: 1.1em; text-indent: -1.1em; }
+  .clause b { font-weight: 700; }
+  #cform section.card > h2 { cursor: default; }
+  #cform section.card > h2::after { content: none; }
+  .note { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 6px 0 0; }
+  .sigwrap { border: 1px dashed var(--muted); border-radius: 12px; background: #fff; position: relative; touch-action: none; }
+  .sigwrap canvas { display: block; width: 100%; height: 160px; border-radius: 12px; }
+  .sigwrap .ph { position: absolute; inset: 0; display: grid; place-items: center; color: #9aa0a6; pointer-events: none; font-size: 15px; }
+  .sigrow { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 13px; color: var(--muted); }
+  .check { display: flex; gap: 8px; align-items: center; font-size: 15px; margin: 4px 0 10px; }
+  .check input { width: 22px; height: 22px; }
   dialog { border: none; border-radius: 16px; padding: 0; width: min(560px, calc(100vw - 24px)); background: var(--card); color: var(--ink); }
   dialog::backdrop { background: rgba(0,0,0,.45); }
   dialog .d-head { padding: 14px 16px; font-weight: 700; border-bottom: 1px solid var(--line); }
@@ -95,8 +113,12 @@
   <h1>🏠 재택의료 방문상담</h1>
   <span id="timer" title="방문 경과시간">00:00</span>
 </header>
+<nav class="tabs" role="tablist">
+  <button type="button" role="tab" data-tab="visit" aria-selected="true">📝 방문기록</button>
+  <button type="button" role="tab" data-tab="consent" aria-selected="false">✍️ 동의서</button>
+</nav>
 
-<main>
+<main id="visitMain">
   <div id="demoBanner" class="banner info">미리보기 모드입니다. 구글 Apps Script로 배포하면 드라이브로 전송됩니다.</div>
   <div id="errBanner" class="banner danger"></div>
   <div id="queueBanner" class="banner info"><span id="queueText"></span><button class="btn small" id="retryBtn" type="button">다시 보내기</button></div>
@@ -106,7 +128,21 @@
   <form id="form" autocomplete="off" onsubmit="return false"></form>
 </main>
 
-<footer>
+<main id="consentMain" hidden>
+  <div id="cErr" class="banner danger"></div>
+  <div id="cOk" class="banner ok"></div>
+  <form id="cform" autocomplete="off" onsubmit="return false"></form>
+</main>
+
+<footer id="consentFooter" hidden>
+  <div class="inner">
+    <button class="btn" type="button" id="cResetBtn">새 동의서</button>
+    <button class="btn primary" type="button" id="cSendBtn">동의서 전송</button>
+  </div>
+  <div id="cState">서명까지 받은 뒤 [동의서 전송]을 누르면 PDF로 드라이브에 저장됩니다</div>
+</footer>
+
+<footer id="visitFooter">
   <div class="inner">
     <button class="btn" type="button" id="resetBtn">NEW</button>
     <button class="btn" type="button" id="saveBtn">저장</button>
@@ -585,8 +621,264 @@ async function copySummary() {
 }
 
 /* ---------- 시작 ---------- */
+
+/* =====================================================================
+ *  동의서 탭 — 「장기요양 재택의료센터 시범사업」 신청서 및 개인정보 수집·이용 및 제공 동의서(공단용)
+ * ===================================================================== */
+const REFUSE = '위의 {x}에 대한 동의를 거부할 권리가 있으며, 동의를 거부할 경우 시범사업 참여에 제한을 받을 수 있습니다.';
+const PURPOSE_RUN = '장기요양 재택의료센터 시범사업 관련 업무수행(시범사업 운영, 급여비용 심사·지급, 시범사업 평가 및 사후관리)';
+const PURPOSE_3RD = '장기요양 재택의료센터 시범사업 관련 업무수행(시범사업 안내 및 신청자 관리)';
+const RECEIVER = '시범사업 참여 의료기관 및 보건소, 보건지소, 보건의료원';
+const SELF_ITEMS = [
+  { key: 'c1', title: '1. 개인정보 수집·이용', lines: [
+    '① 개인정보의 수집·이용 목적 : ' + PURPOSE_RUN,
+    '② 수집하려는 개인정보의 항목 : 성명, 생년월일, 집주소, 연락처, 장기요양 감경기준 적용여부',
+    '③ 개인정보 보유 및 이용기간 : 5년',
+    '④ ' + REFUSE.replace('{x}', '개인정보 수집·이용')] },
+  { key: 'c2', title: '2. 민감정보 수집·이용', lines: [
+    '① 민감정보의 수집·이용 목적 : ' + PURPOSE_RUN,
+    '② 수집하려는 민감정보의 항목 : 장기요양(인정번호, 인정등급, 인정유효기간)정보, 가정간호·일차의료 만성질환관리·장애인 건강주치의 시범사업 및 장기요양급여 이용여부와 일시',
+    '③ 민감정보 보유 및 이용기간 : 5년',
+    '④ ' + REFUSE.replace('{x}', '민감정보 수집·이용')] },
+  { key: 'c3', title: '3. 개인정보 제3자 제공', lines: [
+    '① 개인정보를 제공받는 자 : ' + RECEIVER,
+    '② 개인정보를 제공받는 자의 수집·이용 목적 : ' + PURPOSE_3RD,
+    '③ 제3자가 제공받는 개인정보의 항목 : 성명, 생년월일, 집주소, 연락처, 장기요양 감경기준 적용여부',
+    '④ 제3자의 개인정보 보유 및 이용기간 : 5년',
+    '⑤ ' + REFUSE.replace('{x}', '개인정보 제3자 제공')] },
+  { key: 'c4', title: '4. 민감정보 제3자 제공', lines: [
+    '① 민감정보를 제공받는 자 : ' + RECEIVER,
+    '② 민감정보를 제공받는 자의 수집·이용 목적 : ' + PURPOSE_3RD,
+    '③ 제3자가 제공받는 민감정보의 항목 : 장기요양(인정번호, 인정등급, 인정유효기간) 정보, 일차의료 만성질환관리·장애인 건강주치의 시범사업 이용여부(이용자에 한함)',
+    '④ 제3자의 민감정보 보유 및 이용기간 : 5년',
+    '⑤ ' + REFUSE.replace('{x}', '민감정보 제3자 제공')] }
+];
+const PROXY_ITEMS = [
+  { key: 'p1', title: '1. 개인정보 수집·이용', lines: [
+    '① 개인정보의 수집·이용 목적 : ' + PURPOSE_RUN,
+    '② 수집하려는 개인정보의 항목 : 대리인 정보(성명, 연락처, 신청인과의 관계)',
+    '③ 개인정보 보유 및 이용기간 : 5년',
+    '④ ' + REFUSE.replace('{x}', '개인정보 수집·이용')] },
+  { key: 'p2', title: '2. 개인정보 제3자 제공', lines: [
+    '① 개인정보를 제공받는 제3자 : ' + RECEIVER,
+    '② 개인정보를 제공받는 제3자의 수집·이용 목적 : ' + PURPOSE_3RD,
+    '③ 제3자가 제공받는 개인정보의 항목 : 대리인 정보(성명, 연락처, 신청인과의 관계)',
+    '④ 제3자의 개인정보 보유 및 이용기간 : 5년',
+    '⑤ ' + REFUSE.replace('{x}', '개인정보 제3자 제공')] }
+];
+const ADMIN_TEXT = '본인은 위 사업 업무처리와 관련하여 담당 직원이 「전자정부법」 제36조제2항에 따른 행정정보의 공동이용을 통하여 가족관계를 확인하는 것에 동의합니다.';
+const ADMIN_NOTE = '※ ‘행정정보 공동이용 동의서’에 동의하지 아니하거나 행정정보 공동이용을 통해 가족관계 확인이 불가할 경우, 반드시 증빙서류(가족관계증명서 등(3개월 이내))를 제출해야 합니다.';
+const RELATIONS = ['배우자', '자녀(며느리, 사위 포함)', '부모', '형제자매', '손자녀(손부, 손서 포함)', '조부모(외조부모 포함)', '기타'];
+const ANS = ['동의함', '동의안함'];
+const KEY_CDRAFT = 'hv_consent_draft';
+let cstate = {};
+const pads = {};
+
+function cFresh() {
+  return { _id: uid(), date: today(), name: (state.patient || '').trim(), birth: state.birth || '' };
+}
+function clauseHtml(it) {
+  return `<div class="clause">${it.lines.map(l => `<p>${esc(l)}</p>`).join('')}</div>`;
+}
+function ansChips(key) {
+  return `<div class="chips">${ANS.map(a => `<button type="button" class="chip" aria-pressed="false" data-ckey="${key}" data-val="${a}">${a}</button>`).join('')}</div>`;
+}
+function cInput(key, label, opt) {
+  opt = opt || {};
+  return `<div class="field"><label for="c-${key}">${esc(label)}${opt.req ? ' <span class="req">*</span>' : ''}</label>
+    <input id="c-${key}" data-ckey="${key}" type="${opt.type || 'text'}"${opt.ph ? ` placeholder="${esc(opt.ph)}"` : ''}${opt.num ? ' inputmode="numeric"' : ''}></div>`;
+}
+function sigHtml(key, label) {
+  return `<div class="field"><span class="label">${esc(label)} <span class="req">*</span></span>
+    <div class="sigwrap"><canvas id="sig-${key}"></canvas><div class="ph" id="ph-${key}">여기에 손가락으로 서명해 주세요</div></div>
+    <div class="sigrow"><span>서명일 <b class="sigdate"></b></span><button type="button" class="btn small" data-clear="${key}">지우기</button></div></div>`;
+}
+
+function renderConsent() {
+  $('cform').innerHTML = `
+  <section class="card"><h2>신청서 (정보주체 본인)</h2><div class="body">
+    <div class="row">${cInput('name', '성명', { req: true })}${cInput('birth', '생년월일', { req: true, ph: '예: 19371129', num: true })}</div>
+    <div class="row">${cInput('ltcNo', '장기요양인정번호', { ph: 'L로 시작' })}${cInput('phone', '연락처', { type: 'tel', ph: '010-0000-0000' })}</div>
+    ${cInput('addr', '주소 (주민등록지)')}
+    ${cInput('addr2', '실제 거주지', { ph: '주민등록지와 같으면 비워 두세요' })}
+    <p class="note">※ 본 사업은 거동이 불편하여 병원 등 의료서비스 이용이 어려운 분에게 월 1회 방문진료, 월 2회 방문간호를 기본 제공하고 지역 내 복지 서비스를 연계해주는 사업으로 본인부담금이 일부 발생합니다.</p>
+  </div></section>
+
+  <section class="card"><h2>개인정보 수집·이용 및 제공 동의 (본인)</h2><div class="body">
+    <p class="note" style="margin:0 0 10px">「장기요양 재택의료센터 시범사업」 참여를 위하여 아래의 개인정보 수집·이용 및 제공에 대한 내용을 자세히 읽어 보신 후 동의 여부를 결정하여 주시기 바랍니다.</p>
+    <div class="chips" style="margin-bottom:12px"><button type="button" class="chip" id="cAllSelf">전체 동의함</button></div>
+    ${SELF_ITEMS.map(it => `<div class="field"><span class="label">${esc(it.title)} <span class="req">*</span></span>${clauseHtml(it)}${ansChips(it.key)}</div>`).join('')}
+    <div id="selfSigBox">${sigHtml('self', '본인 서명')}</div>
+  </div></section>
+
+  <section class="card"><h2>대리인(가족) 작성</h2><div class="body">
+    <label class="check"><input type="checkbox" id="c-proxy" data-ckey="proxy"> 대리인(가족)이 작성합니다</label>
+    <p class="note" style="margin:0">※ 대리인(가족)이 신청서 및 개인정보 수집·이용 및 제공 동의서를 작성하여 제출하는 경우에만 작성합니다.</p>
+    <div id="proxyBox" hidden style="margin-top:12px">
+      <div class="row">${cInput('pName', '대리인 성명', { req: true })}${cInput('pPhone', '대리인 연락처', { type: 'tel', ph: '010-0000-0000' })}</div>
+      <div class="field"><span class="label">신청인과의 관계 <span class="req">*</span></span><div class="chips">${RELATIONS.map(r => `<button type="button" class="chip" aria-pressed="false" data-ckey="pRel" data-val="${esc(r)}">${esc(r)}</button>`).join('')}</div></div>
+      <div id="pRelEtcBox" hidden>${cInput('pRelEtc', '기타 관계', { ph: '예: 조카' })}</div>
+      ${PROXY_ITEMS.map(it => `<div class="field"><span class="label">대리인 ${esc(it.title)} <span class="req">*</span></span>${clauseHtml(it)}${ansChips(it.key)}</div>`).join('')}
+      ${sigHtml('proxy', '대리인 서명')}
+      <div class="field" style="margin-top:18px"><span class="label">행정정보 공동이용 동의 <span class="req">*</span></span>
+        <div class="clause"><p>${esc(ADMIN_TEXT)}</p></div>${ansChips('admin')}<p class="note">${esc(ADMIN_NOTE)}</p></div>
+      <label class="check"><input type="checkbox" id="c-adminSame" data-ckey="adminSame" checked> 위 대리인 서명을 행정정보 공동이용 동의서에도 사용</label>
+      <div id="adminSigBox" hidden>${sigHtml('admin', '대리인 서명 (행정정보 공동이용)')}</div>
+    </div>
+  </div></section>`;
+
+  const f = $('cform');
+  f.querySelectorAll('.chip[data-ckey]').forEach(b => b.addEventListener('click', onCChip));
+  f.querySelectorAll('input[data-ckey]').forEach(el => el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', onCInput));
+  f.querySelectorAll('[data-clear]').forEach(b => b.addEventListener('click', () => { pads[b.dataset.clear].clear(); cstate['sig_' + b.dataset.clear] = ''; cSave(); }));
+  $('cAllSelf').addEventListener('click', () => { SELF_ITEMS.forEach(it => { cstate[it.key] = '동의함'; }); cPaint(); cSave(); });
+  ['self', 'proxy', 'admin'].forEach(k => { pads[k] = makePad(k); });
+}
+
+/* 손가락 서명 패드 */
+function makePad(key) {
+  const cv = $('sig-' + key), ph = $('ph-' + key);
+  const ctx = cv.getContext('2d');
+  let drawing = false, last = null;
+  function fit() {
+    const r = cv.getBoundingClientRect();
+    if (!r.width) return;
+    const keep = cstate['sig_' + key];
+    cv.width = Math.round(r.width * 2); cv.height = Math.round(r.height * 2);
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, r.width, r.height);
+    ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111';
+    if (keep) load(keep);
+  }
+  function load(url) {
+    const img = new Image();
+    img.onload = () => { const r = cv.getBoundingClientRect(); ctx.drawImage(img, 0, 0, r.width, r.height); ph.hidden = true; };
+    img.src = url;
+  }
+  function pos(e) { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  cv.addEventListener('pointerdown', e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); drawing = true; last = pos(e); ph.hidden = true; ctx.beginPath(); ctx.arc(last.x, last.y, 1.2, 0, Math.PI * 2); ctx.fillStyle = '#111'; ctx.fill(); });
+  cv.addEventListener('pointermove', e => { if (!drawing) return; const p = pos(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; });
+  const end = () => { if (!drawing) return; drawing = false; cstate['sig_' + key] = cv.toDataURL('image/png'); cSave(); };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end); cv.addEventListener('pointerleave', end);
+  return {
+    fit,
+    clear() { const r = cv.getBoundingClientRect(); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, r.width, r.height); ph.hidden = false; }
+  };
+}
+
+function cPaint() {
+  document.querySelectorAll('#cform input[data-ckey]').forEach(el => {
+    const v = cstate[el.dataset.ckey];
+    if (el.type === 'checkbox') el.checked = el.dataset.ckey === 'adminSame' ? v !== false : !!v;
+    else if (el.value !== (v || '')) el.value = v || '';
+  });
+  document.querySelectorAll('#cform .chip[data-ckey]').forEach(b => b.setAttribute('aria-pressed', cstate[b.dataset.ckey] === b.dataset.val));
+  $('proxyBox').hidden = !cstate.proxy;
+  $('pRelEtcBox').hidden = cstate.pRel !== '기타';
+  $('adminSigBox').hidden = cstate.adminSame !== false;
+  document.querySelectorAll('.sigdate').forEach(el => { el.textContent = (cstate.date || today()).replace(/-/g, '. ') + '.'; });
+  ['self', 'proxy', 'admin'].forEach(k => { if (!cstate['sig_' + k]) pads[k].clear(); });
+  requestAnimationFrame(() => Object.values(pads).forEach(p => p.fit()));
+}
+function onCChip(e) {
+  const { ckey, val } = e.currentTarget.dataset;
+  cstate[ckey] = cstate[ckey] === val ? '' : val;
+  cPaint(); cSave();
+}
+function onCInput(e) {
+  const el = e.target, k = el.dataset.ckey;
+  if (el.type === 'checkbox') cstate[k] = el.checked;
+  else { if (k === 'birth') el.value = formatBirth(el.value); cstate[k] = el.value; }
+  if (el.type === 'checkbox') cPaint();
+  cSave();
+}
+let cTimer;
+function cSave() { clearTimeout(cTimer); cTimer = setTimeout(() => LS.set(KEY_CDRAFT, cstate), 300); }
+
+function cErr(msg) { const b = $('cErr'); b.textContent = msg; b.classList.add('show'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function cValidate() {
+  const miss = [];
+  if (!hasValue(cstate.name)) miss.push('성명');
+  if (!hasValue(cstate.birth)) miss.push('생년월일');
+  SELF_ITEMS.forEach(it => { if (!cstate[it.key]) miss.push('본인 ' + it.title.slice(3)); });
+  if (cstate.proxy) {
+    if (!hasValue(cstate.pName)) miss.push('대리인 성명');
+    if (!cstate.pRel) miss.push('신청인과의 관계');
+    PROXY_ITEMS.forEach(it => { if (!cstate[it.key]) miss.push('대리인 ' + it.title.slice(3)); });
+    if (!cstate.sig_proxy) miss.push('대리인 서명');
+    if (!cstate.admin) miss.push('행정정보 공동이용 동의');
+    if (cstate.adminSame === false && !cstate.sig_admin) miss.push('행정정보 공동이용 서명');
+  } else if (!cstate.sig_self) miss.push('본인 서명');
+  if (miss.length) { cErr('아직 안 된 항목: ' + miss.join(', ')); return false; }
+  $('cErr').classList.remove('show');
+  return true;
+}
+function buildConsent() {
+  const c = cstate, proxy = !!c.proxy;
+  return {
+    id: c._id, date: c.date || today(), staff: state.author || LS.get(KEY_AUTHOR, ''),
+    person: { name: (c.name || '').trim(), birth: c.birth || '', ltcNo: c.ltcNo || '', phone: c.phone || '', addr: c.addr || '', addr2: c.addr2 || '' },
+    self: SELF_ITEMS.map(it => ({ title: it.title, lines: it.lines, answer: c[it.key] })),
+    selfSig: c.sig_self || '',
+    proxy: proxy ? {
+      name: c.pName || '', phone: c.pPhone || '', relation: c.pRel === '기타' ? '기타(' + (c.pRelEtc || '') + ')' : c.pRel,
+      items: PROXY_ITEMS.map(it => ({ title: it.title, lines: it.lines, answer: c[it.key] })),
+      sig: c.sig_proxy || '',
+      admin: c.admin, adminText: ADMIN_TEXT, adminNote: ADMIN_NOTE,
+      adminSig: c.adminSame === false ? (c.sig_admin || '') : (c.sig_proxy || '')
+    } : null
+  };
+}
+async function cSend() {
+  if (!cValidate()) return;
+  const btn = $('cSendBtn');
+  btn.disabled = true; btn.textContent = '전송 중…';
+  try {
+    const res = await callServer('saveConsent', buildConsent());
+    const link = res && res.pdfUrl ? ` <a href="${esc(res.pdfUrl)}" target="_blank" rel="noopener">동의서 PDF 열기</a>` : '';
+    flash('cOk', `✅ ${esc(cstate.name)}님 동의서를 드라이브에 저장했습니다.${res && res.demo ? ' (미리보기 — 실제 전송 안 됨)' : ''}${link}`, 15000);
+    cstate = cFresh(); LS.del(KEY_CDRAFT); cPaint();
+    window.scrollTo({ top: 0 });
+  } catch (err) {
+    cErr('동의서를 전송하지 못했습니다(' + (err && err.message ? err.message : '네트워크') + '). 작성한 내용과 서명은 휴대폰에 남아 있으니 잠시 후 다시 [동의서 전송]을 눌러 주세요.');
+  } finally {
+    btn.disabled = false; btn.textContent = '동의서 전송';
+  }
+}
+let cResetArmed = false;
+function cReset() {
+  const btn = $('cResetBtn');
+  if (!cResetArmed && (hasValue(cstate.name) || cstate.sig_self)) {
+    cResetArmed = true; btn.textContent = '한 번 더 누르면 비움';
+    setTimeout(() => { cResetArmed = false; btn.textContent = '새 동의서'; }, 3000);
+    return;
+  }
+  cResetArmed = false; btn.textContent = '새 동의서';
+  cstate = cFresh(); LS.del(KEY_CDRAFT); cPaint();
+}
+function showTab(tab) {
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
+  $('visitMain').hidden = $('visitFooter').hidden = tab !== 'visit';
+  $('consentMain').hidden = $('consentFooter').hidden = tab !== 'consent';
+  if (tab === 'consent') {
+    // 방문기록에서 입력한 환자를 미리 채움
+    if (!hasValue(cstate.name) && hasValue(state.patient)) { cstate.name = state.patient.trim(); cstate.birth = cstate.birth || state.birth || ''; }
+    cPaint();
+  }
+  window.scrollTo({ top: 0 });
+}
+function initConsent() {
+  renderConsent();
+  cstate = Object.assign(cFresh(), LS.get(KEY_CDRAFT, {}));
+  document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+  $('cSendBtn').addEventListener('click', cSend);
+  $('cResetBtn').addEventListener('click', cReset);
+  window.addEventListener('resize', () => { if (!$('consentMain').hidden) Object.values(pads).forEach(p => p.fit()); });
+}
+
 function init() {
   render();
+  initConsent();
   state = Object.assign(freshState(), LS.get(KEY_DRAFT, {}));
   paint();
   if (hasValue(state.patient)) flash('okBanner', '작성 중이던 기록을 불러왔습니다.');

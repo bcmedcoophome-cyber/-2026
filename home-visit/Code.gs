@@ -10,7 +10,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-10-15'; // 휴대폰 화면 아래에 표시됨: 이 날짜가 보이면 최신 코드
+const APP_VERSION = '2026-10-18'; // 휴대폰 화면 아래에 표시됨: 이 날짜가 보이면 최신 코드
 // 방문기록지를 저장할 구글 드라이브 폴더 (「환자별 방문기록지 (사회복지)」)
 // 폴더 주소 https://drive.google.com/drive/folders/ 뒤의 ID 부분입니다.
 const TARGET_FOLDER_ID = '1LA6KMNOLoPhVf8H1qza6v6voN-U-PfeG';
@@ -276,4 +276,178 @@ function createDoc_(folder, record) {
 function styleLabelCell_(cell) {
   cell.setBackgroundColor('#f1f3f4');
   cell.editAsText().setBold(true);
+}
+
+/* =====================================================================
+ *  동의서 — 「장기요양 재택의료센터 시범사업」 신청서 및 개인정보 수집·이용 및 제공 동의서(공단용)
+ *  저장 위치: 지정 폴더 / 동의서 / YYYY-MM / 동의서_성명_YYYY-MM-DD.pdf
+ *  시트: 같은 기록부의 '동의서' 탭에 한 줄씩
+ * ===================================================================== */
+const CONSENT_SHEET = '동의서';
+const CONSENT_FOLDER = '동의서';
+const CONSENT_TITLE = '「장기요양 재택의료센터 시범사업」 참여를 위한\n신청서 및 개인정보 수집·이용 및 제공 동의서 (공단용)';
+
+function saveConsent(c) {
+  if (!c || !c.id || !c.person || !c.person.name) throw new Error('성명을 입력해 주세요.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const { folder, ss } = ensureStorage_();
+    let sh = ss.getSheetByName(CONSENT_SHEET);
+    if (!sh) {
+      sh = ss.insertSheet(CONSENT_SHEET);
+      sh.getRange(1, 1, 1, 4).setValues([['기록ID', '전송시각', '담당자', '구글계정']]);
+      sh.setFrozenRows(1);
+      sh.getRange('1:1').setFontWeight('bold').setBackground('#e8f0fe');
+    }
+    // 같은 동의서를 다시 보낸 경우 중복 저장하지 않음
+    if (sh.getLastRow() > 1) {
+      const found = sh.getRange(2, 1, sh.getLastRow() - 1, 1).createTextFinder(c.id).matchEntireCell(true).findNext();
+      if (found) {
+        const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+        const col = header.indexOf('동의서PDF');
+        return { ok: true, duplicate: true, pdfUrl: col >= 0 ? sh.getRange(found.getRow(), col + 1).getDisplayValue() : '' };
+      }
+    }
+
+    const pdfUrl = createConsentPdf_(folder, c);
+    const p = c.person, px = c.proxy;
+    const data = {
+      '기록ID': c.id,
+      '전송시각': Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'),
+      '담당자': c.staff || '',
+      '구글계정': Session.getActiveUser().getEmail() || '',
+      '동의일': c.date, '성명': p.name, '생년월일': p.birth, '장기요양인정번호': p.ltcNo,
+      '연락처': p.phone, '주소(주민등록지)': p.addr, '실제 거주지': p.addr2
+    };
+    (c.self || []).forEach(it => { data['본인 ' + it.title.replace(/^\d+\.\s*/, '')] = it.answer || ''; });
+    data['대리인 작성'] = px ? '예' : '아니오';
+    data['대리인 성명'] = px ? px.name : '';
+    data['대리인 연락처'] = px ? px.phone : '';
+    data['신청인과의 관계'] = px ? px.relation : '';
+    ((px && px.items) || []).forEach(it => { data['대리인 ' + it.title.replace(/^\d+\.\s*/, '')] = it.answer || ''; });
+    data['행정정보 공동이용'] = px ? (px.admin || '') : '';
+    data['동의서PDF'] = pdfUrl;
+
+    const header = ensureHeaders_(sh, Object.keys(data));
+    const row = header.map(h => safeCell_(data[h]));
+    sh.getRange(sh.getLastRow() + 1, 1, 1, row.length).setNumberFormat('@').setValues([row]);
+    return { ok: true, pdfUrl: pdfUrl };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function sigBlob_(dataUrl, name) {
+  const m = String(dataUrl || '').match(/^data:image\/png;base64,(.+)$/);
+  return m ? Utilities.newBlob(Utilities.base64Decode(m[1]), 'image/png', name) : null;
+}
+
+function para_(body, text, opt) {
+  opt = opt || {};
+  const p = body.appendParagraph(text);
+  if (opt.heading) p.setHeading(opt.heading);
+  if (opt.align) p.setAlignment(opt.align);
+  const t = p.editAsText();
+  if (opt.bold) t.setBold(true);
+  if (opt.size) t.setFontSize(opt.size);
+  if (opt.color) t.setForegroundColor(opt.color);
+  return p;
+}
+
+/** 서명 줄: "본인 성명  홍길동  [서명 이미지]  (서명 또는 인)" */
+function signLine_(body, label, name, dataUrl) {
+  const p = body.appendParagraph(label + '   ' + name + '   ');
+  p.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+  p.editAsText().setBold(true);
+  const blob = sigBlob_(dataUrl, 'sign.png');
+  if (blob) {
+    const img = p.appendInlineImage(blob);
+    const w = 150;
+    img.setWidth(w);
+    img.setHeight(Math.round(w * img.getHeight() / img.getWidth()));
+  }
+  p.appendText('  (서명 또는 인)');
+}
+
+function consentItems_(body, items) {
+  items.forEach(it => {
+    para_(body, it.title, { bold: true });
+    it.lines.forEach(l => para_(body, '   ' + l, { size: 9 }));
+    const yes = it.answer === '동의함';
+    para_(body, '   ' + (yes ? '☑' : '☐') + ' 동의함     ' + (yes ? '☐' : '☑') + ' 동의안함', { bold: true, color: yes ? '#188038' : '#c5221f' });
+  });
+}
+
+function createConsentPdf_(folder, c) {
+  const p = c.person, px = c.proxy;
+  const clean = t => String(t || '').replace(/[\\/:*?"<>|_]/g, ' ').trim();
+  const name = ['동의서', clean(p.name), c.date].join('_');
+  const doc = DocumentApp.create(name);
+  try {
+    const body = doc.getBody();
+    body.setMarginTop(32);
+    body.setMarginBottom(32);
+    body.setMarginLeft(40);
+    body.setMarginRight(40);
+    const H = DocumentApp.ParagraphHeading, A = DocumentApp.HorizontalAlignment;
+    const ymd = String(c.date).split('-');
+    const dateText = ymd[0] + ' 년  ' + ymd[1] + ' 월  ' + ymd[2] + ' 일';
+
+    const first = body.getParagraphs()[0];
+    first.setText('[별지 제1호 서식]');
+    first.editAsText().setFontSize(8);
+    para_(body, CONSENT_TITLE, { heading: H.HEADING1, align: A.CENTER, size: 15 });
+
+    para_(body, '[ 신청서 ]', { heading: H.HEADING2 });
+    const t = body.appendTable([
+      ['성명', p.name, '장기요양인정번호', p.ltcNo || ''],
+      ['생년월일', p.birth, '연락처', p.phone || ''],
+      ['주소(주민등록지)', p.addr || '', '실제 거주지', p.addr2 || '(주민등록지와 동일)']
+    ]);
+    t.setBorderColor('#9aa0a6');
+    for (let r = 0; r < t.getNumRows(); r++) [0, 2].forEach(k => styleLabelCell_(t.getRow(r).getCell(k)));
+    para_(body, '※ 본 사업은 거동이 불편하여 병원 등 의료서비스 이용이 어려운 분에게 월 1회 방문진료, 월 2회 방문간호를 기본 제공하고 지역 내 복지 서비스를 연계해주는 사업으로 본인부담금이 일부 발생합니다.', { size: 9 });
+
+    para_(body, '[ 개인정보 수집·이용 및 제공 동의서 ]', { heading: H.HEADING2 });
+    para_(body, '「장기요양 재택의료센터 시범사업」 참여를 위하여 아래의 개인정보 수집·이용 및 제공에 대한 내용을 자세히 읽어 보신 후 동의 여부를 결정하여 주시기 바랍니다.', { size: 9 });
+    consentItems_(body, c.self || []);
+    para_(body, dateText, { align: A.RIGHT, bold: true });
+    signLine_(body, '본인 성명', p.name, c.selfSig);
+    para_(body, '국민건강보험공단 귀중', { bold: true, size: 13 });
+
+    if (px) {
+      body.appendPageBreak();
+      para_(body, '[ 대리인의 개인정보 수집·이용 및 제공 동의서 ]', { heading: H.HEADING2 });
+      para_(body, '※ 대리인(가족)이 신청서 및 개인정보 수집·이용 및 제공 동의서를 작성하여 제출하는 경우에만 작성합니다.', { size: 9 });
+      const pt = body.appendTable([['대리인 성명', px.name, '연락처', px.phone || ''], ['신청인과의 관계', px.relation || '', '', '']]);
+      pt.setBorderColor('#9aa0a6');
+      [0, 1].forEach(r => styleLabelCell_(pt.getRow(r).getCell(0)));
+      styleLabelCell_(pt.getRow(0).getCell(2));
+      consentItems_(body, px.items || []);
+      para_(body, dateText, { align: A.RIGHT, bold: true });
+      signLine_(body, '대리인 성명', px.name, px.sig);
+
+      para_(body, '행정정보 공동이용 동의서', { heading: H.HEADING2, align: A.CENTER });
+      para_(body, px.adminText || '');
+      const ok = px.admin === '동의함';
+      para_(body, (ok ? '☑' : '☐') + ' 동의함     ' + (ok ? '☐' : '☑') + ' 동의안함', { bold: true, color: ok ? '#188038' : '#c5221f' });
+      para_(body, px.adminNote || '', { size: 9 });
+      signLine_(body, '대리인 성명', px.name, px.adminSig);
+      para_(body, '국민건강보험공단 귀중', { bold: true, size: 13 });
+    }
+
+    const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+    para_(body, '전자 서명 접수: ' + now + ' · 담당자 ' + (c.staff || ''), { size: 8, color: '#5f6368' });
+    doc.saveAndClose();
+
+    const monthFolder = getSubFolder_(getSubFolder_(folder, CONSENT_FOLDER), String(c.date).slice(0, 7));
+    const pdf = monthFolder.createFile(DriveApp.getFileById(doc.getId()).getAs('application/pdf'));
+    pdf.setName(name + '.pdf');
+    DriveApp.getFileById(doc.getId()).setTrashed(true); // PDF만 남김
+    return pdf.getUrl();
+  } catch (e) {
+    try { DriveApp.getFileById(doc.getId()).setTrashed(true); } catch (e2) {}
+    throw e;
+  }
 }

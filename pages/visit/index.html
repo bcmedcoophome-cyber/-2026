@@ -15,7 +15,7 @@
   /*
    * 홈 화면 아이콘용 실행 페이지.
    * 앱(Apps Script 웹앱) 주소는 저장소에 넣지 않고, 각 휴대폰에만 기억합니다.
-   * 홈 화면 아이콘으로 열렸을 때(아이폰: 독립 실행 화면, 안드로이드: ?go)만 앱으로 이동합니다.
+   * 홈 화면 아이콘으로 열렸을 때(독립 실행 화면)만 앱으로 이동합니다.
    * 사파리 탭에서는 이동하지 않아야 아이폰 '홈 화면에 추가'가 구글 아이콘을 가져가지 않습니다.
    */
   var KEY = 'hv_exec_id';
@@ -28,7 +28,9 @@
   var params = new URLSearchParams(location.search);
   var standalone = window.navigator.standalone === true ||
     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-  if (id && (standalone || params.has('go')) && !params.has('setup')) location.replace(execUrl(id));
+  // 사파리/크롬 탭에서는 어떤 주소로 열어도 앱으로 넘어가지 않음(예전 ?go 주소 포함)
+  if (id && standalone && !params.has('setup')) location.replace(execUrl(id));
+  else if (params.has('go')) history.replaceState(null, '', location.pathname + location.hash);
 </script>
 <style>
   :root { --bg: #f3f5fb; --card: #fff; --ink: #161c3a; --muted: #5d6480; --line: #dde1ef; --brand: #2e3a8c; --brand-ink: #fff; --ok: #2e3a8c; --err: #c5221f; }
@@ -86,6 +88,7 @@
   </section>
 
   <p class="small">앱 주소는 이 휴대폰에만 저장되고 다른 곳으로 보내지 않습니다. 주소가 바뀌었으면 <a href="?setup">여기</a>에서 다시 붙여넣으세요.</p>
+  <p class="small">버전 3</p>
 </main>
 <script>
   function parseId(text) {

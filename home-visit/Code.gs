@@ -409,8 +409,47 @@ function labelTable_(body, rows, labelCols) {
   return t;
 }
 
+/** 휴대폰에서 원본 서식 위에 찍어 보낸 페이지 이미지들로 PDF를 만듦 */
+function createImagePdf_(folder, c, name) {
+  const doc = DocumentApp.create(name);
+  try {
+    const body = doc.getBody();
+    body.setPageWidth(595.3);
+    body.setPageHeight(841.9);
+    body.setMarginTop(0);
+    body.setMarginBottom(0);
+    body.setMarginLeft(0);
+    body.setMarginRight(0);
+    c.pages.forEach((url, i) => {
+      const m = String(url).match(/^data:image\/(jpeg|png);base64,(.+)$/);
+      if (!m) throw new Error('서식 이미지가 올바르지 않습니다.');
+      const blob = Utilities.newBlob(Utilities.base64Decode(m[2]), 'image/' + m[1], 'page' + (i + 1) + '.' + (m[1] === 'png' ? 'png' : 'jpg'));
+      const para = i === 0 ? body.getParagraphs()[0] : body.appendParagraph('');
+      para.setSpacingBefore(0);
+      para.setSpacingAfter(0);
+      para.setLineSpacing(1);
+      const img = para.appendInlineImage(blob);
+      img.setWidth(594);
+      img.setHeight(840);
+    });
+    doc.saveAndClose();
+    const monthFolder = getSubFolder_(getSubFolder_(folder, CONSENT_FOLDER), String(c.date).slice(0, 7));
+    const pdf = monthFolder.createFile(DriveApp.getFileById(doc.getId()).getAs('application/pdf'));
+    pdf.setName(name + '.pdf');
+    DriveApp.getFileById(doc.getId()).setTrashed(true);
+    return pdf.getUrl();
+  } catch (e) {
+    try { DriveApp.getFileById(doc.getId()).setTrashed(true); } catch (e2) {}
+    throw e;
+  }
+}
+
 function createConsentPdf_(folder, c) {
   const p = c.person, px = c.proxy, f = c.form || {};
+  if (c.pages && c.pages.length) {
+    const cl = t => String(t || '').replace(/[\\/:*?"<>|_]/g, ' ').trim();
+    return createImagePdf_(folder, c, ['동의서(' + (f.label || '공단용') + ')', cl(p.name), c.date].join('_'));
+  }
   const clean = t => String(t || '').replace(/[\\/:*?"<>|_]/g, ' ').trim();
   const name = ['동의서(' + (f.label || '공단용') + ')', clean(p.name), c.date].join('_');
   const doc = DocumentApp.create(name);

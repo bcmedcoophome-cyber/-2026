@@ -668,14 +668,82 @@ const PROXY_ITEMS = [
 ];
 const ADMIN_TEXT = '본인은 위 사업 업무처리와 관련하여 담당 직원이 「전자정부법」 제36조제2항에 따른 행정정보의 공동이용을 통하여 가족관계를 확인하는 것에 동의합니다.';
 const ADMIN_NOTE = '※ ‘행정정보 공동이용 동의서’에 동의하지 아니하거나 행정정보 공동이용을 통해 가족관계 확인이 불가할 경우, 반드시 증빙서류(가족관계증명서 등(3개월 이내))를 제출해야 합니다.';
+
+/* ---- 의료기관용 [별지 제2호 서식] (보내 주신 서식 문구 그대로) ---- */
+const PURPOSE_C = '장기요양 재택의료센터 시범사업 관련 업무수행';
+const HEALTH_ITEMS = '건강정보(의료기관명, 질병명, 질병코드, 급여내역 및 횟수), 방문 기본정보(서비스* 이용내역(실시일, 소요시간, 방문사유, 수행인력, 진료 및 간호정보(조치내용 및 향후 계획))), 장기요양(인정번호, 인정등급, 인정유효기간)정보, 방문진료료 본인부담률 및 부담액, 가정간호·일차의료 만성질환관리·장애인 건강주치의 시범사업 및 장기요양급여 이용여부와 일시';
+const HEALTH_NOTE = '* 포괄 평가 및 케어플랜, 직종별 방문점검 서비스(방문진료·간호, 대상자 모니터링, 점검 및 평가, 서비스 연계·조정 결과 등 포함)';
+const LOCAL_GOV = '          '; // 지자체 이름 (서식의 빈칸) — 예: '부천시'
+const C_SELF = [
+  { key: 'c1', title: '1. 개인정보 수집·이용 내역', lines: [
+    '① 개인정보의 수집·이용 목적 : ' + PURPOSE_C,
+    '② 수집하려는 개인정보의 항목 : 성명, 생년월일, 주소, 연락처, 장기요양 감경기준 적용여부, 지역사회 자원연계 정보',
+    '③ 개인정보 보유 및 이용기간 : 5년',
+    '④ ' + REFUSE.replace('{x}', '개인정보 수집·이용')] },
+  { key: 'c2', title: '2. 민감정보 수집·이용 내역', lines: [
+    '① 민감정보의 수집·이용 목적 : ' + PURPOSE_C,
+    '② 수집하려는 민감정보의 항목 : ' + HEALTH_ITEMS,
+    HEALTH_NOTE,
+    '③ 민감정보 보유 및 이용기간 : 5년',
+    '④ ' + REFUSE.replace('{x}', '민감정보 수집·이용')] },
+  { key: 'c3', title: '3. 개인정보 제3자 제공 내역', lines: [
+    '① 개인정보를 제공받는 자 : 보건복지부, 국민건강보험공단, 지자체(' + LOCAL_GOV + ')',
+    '② 개인정보를 제공받는 자의 수집·이용 목적 : 대상자 관리, 서비스 연계, 서비스 내용 심사·평가, 서비스 적절성 및 효과성 평가를 위한 기초자료 수집 등 시범사업 관련 업무수행',
+    '③ 제3자가 제공받는 개인정보의 항목 : 성명, 생년월일, 주소, 연락처, 장기요양감경기준 적용여부, 지역사회 자원연계정보',
+    '- 보건복지부 및 국민건강보험공단 : 성명, 생년월일, 주소, 연락처, 장기요양감경기준 적용여부, 지역사회 자원연계 정보',
+    '- 지자체(' + LOCAL_GOV + ') : 성명, 생년월일, 주소, 연락처',
+    '④ 제3자의 개인정보 보유 및 이용기간 : 5년',
+    '⑤ ' + REFUSE.replace('{x}', '개인정보 제3자 제공')] },
+  { key: 'c4', title: '4. 민감정보 제3자 제공 내역', lines: [
+    '① 민감정보를 제공받는 자 : 보건복지부, 국민건강보험공단',
+    '② 민감정보를 제공받는 자의 수집·이용 목적 : 대상자 관리, 서비스 내용 심사·평가, 서비스 적절성 및 효과성 평가를 위한 기초자료 수집 등 시범사업 관련 업무수행',
+    '③ 제3자가 제공받는 민감정보의 항목 : ' + HEALTH_ITEMS,
+    HEALTH_NOTE,
+    '④ 제3자의 민감정보 보유 및 이용기간 : 5년',
+    '⑤ ' + REFUSE.replace('{x}', '민감정보 제3자 제공')] }
+];
+const C_PROXY = [
+  { key: 'p1', title: '1. 개인정보 수집·이용 내역', lines: [
+    '① 개인정보의 수집·이용 목적 : ' + PURPOSE_C,
+    '② 수집하려는 개인정보의 항목 : 대리인 정보(성명, 연락처, 신청인과의 관계)',
+    '③ 개인정보 보유 및 이용기간 : 5년',
+    '④ ' + REFUSE.replace('{x}', '개인정보 수집·이용')] },
+  { key: 'p2', title: '2. 개인정보 제3자 제공 내역', lines: [
+    '① 개인정보를 제공받는 제3자 : 보건복지부, 국민건강보험공단, 지자체(' + LOCAL_GOV + ')',
+    '② 개인정보를 제공받는 제3자의 수집·이용 목적 : 대상자 관리, 서비스 연계, 서비스 적절성 및 효과성 평가를 위한 기초자료 수집 등 시범사업 관련 업무수행',
+    '③ 제3자가 제공받는 개인정보의 항목 : 대리인 정보(성명, 연락처, 신청인과의 관계)',
+    '④ 제3자의 개인정보 보유 및 이용기간 : 5년',
+    '⑤ ' + REFUSE.replace('{x}', '개인정보 제3자 제공')] }
+];
+const CENTER_NAME = '○○'; // 귀중 문구의 기관명 — 예: '○○의원'
+
 const RELATIONS = ['배우자', '자녀(며느리, 사위 포함)', '부모', '형제자매', '손자녀(손부, 손서 포함)', '조부모(외조부모 포함)', '기타'];
+const FORMS = {
+  clinic: { label: '의료기관용', no: '[별지 제2호 서식]',
+    title: '「장기요양 재택의료센터 시범사업」 참여를 위한\n신청서 및 개인정보 수집·이용·제3자 제공 동의서 (의료기관용)',
+    section: '[ 개인정보 수집·이용·제3자 제공 동의서 ]',
+    intro: '「장기요양 재택의료센터 시범사업」 참여를 위하여 아래의 개인정보 수집·이용 및 제3자 제공에 대한 내용을 자세히 읽어 보신 후 동의 여부를 결정하여 주시기 바랍니다.',
+    proxySection: '[ 대리인의 개인정보 수집·이용·제3자 제공 동의서 ]',
+    proxyNote: '※ 대리인(가족)이 신청서 및 개인정보 수집·이용·제3자 제공 동의서를 작성하여 제출하는 경우에만 작성합니다.',
+    self: C_SELF, proxy: C_PROXY, admin: false,
+    addressee: '장기요양 재택의료센터 시범기관 ' + CENTER_NAME + ' 기관장 귀중' },
+  nhis: { label: '공단용', no: '[별지 제1호 서식]',
+    title: '「장기요양 재택의료센터 시범사업」 참여를 위한\n신청서 및 개인정보 수집·이용 및 제공 동의서 (공단용)',
+    section: '[ 개인정보 수집·이용 및 제공 동의서 ]',
+    intro: '「장기요양 재택의료센터 시범사업」 참여를 위하여 아래의 개인정보 수집·이용 및 제공에 대한 내용을 자세히 읽어 보신 후 동의 여부를 결정하여 주시기 바랍니다.',
+    proxySection: '[ 대리인의 개인정보 수집·이용 및 제공 동의서 ]',
+    proxyNote: '※ 대리인(가족)이 신청서 및 개인정보 수집·이용 및 제공 동의서를 작성하여 제출하는 경우에만 작성합니다.',
+    self: SELF_ITEMS, proxy: PROXY_ITEMS, admin: true,
+    addressee: '국민건강보험공단 귀중' }
+};
+function F() { return FORMS[cstate.form] || FORMS.clinic; }
 const ANS = ['동의함', '동의안함'];
 const KEY_CDRAFT = 'hv_consent_draft';
 let cstate = {};
 const pads = {};
 
 function cFresh() {
-  return { _id: uid(), date: today(), name: (state.patient || '').trim(), birth: state.birth || '' };
+  return { _id: uid(), date: today(), form: (cstate && cstate.form) || 'clinic', name: (state.patient || '').trim(), birth: state.birth || '' };
 }
 function clauseHtml(it) {
   return `<div class="clause">${it.lines.map(l => `<p>${esc(l)}</p>`).join('')}</div>`;
@@ -696,6 +764,10 @@ function sigHtml(key, label) {
 
 function renderConsent() {
   $('cform').innerHTML = `
+  <section class="card"><h2>동의서 종류</h2><div class="body">
+    <div class="chips">${Object.keys(FORMS).map(k => `<button type="button" class="chip" data-form="${k}" aria-pressed="${(cstate.form || 'clinic') === k}">${FORMS[k].label}</button>`).join('')}</div>
+    <p class="note">${esc(F().no)} ${esc(F().title.replace('\n', ' '))}</p>
+  </div></section>
   <section class="card"><h2>신청서 (정보주체 본인)</h2><div class="body">
     <div class="row">${cInput('name', '성명', { req: true })}${cInput('birth', '생년월일', { req: true, ph: '예: 19371129', num: true })}</div>
     <div class="row">${cInput('ltcNo', '장기요양인정번호', { ph: 'L로 시작' })}${cInput('phone', '연락처', { type: 'tel', ph: '010-0000-0000' })}</div>
@@ -704,26 +776,26 @@ function renderConsent() {
     <p class="note">※ 본 사업은 거동이 불편하여 병원 등 의료서비스 이용이 어려운 분에게 월 1회 방문진료, 월 2회 방문간호를 기본 제공하고 지역 내 복지 서비스를 연계해주는 사업으로 본인부담금이 일부 발생합니다.</p>
   </div></section>
 
-  <section class="card"><h2>개인정보 수집·이용 및 제공 동의 (본인)</h2><div class="body">
-    <p class="note" style="margin:0 0 10px">「장기요양 재택의료센터 시범사업」 참여를 위하여 아래의 개인정보 수집·이용 및 제공에 대한 내용을 자세히 읽어 보신 후 동의 여부를 결정하여 주시기 바랍니다.</p>
+  <section class="card"><h2>${esc(F().section.replace(/[\[\]]/g, '').trim())} (본인)</h2><div class="body">
+    <p class="note" style="margin:0 0 10px">${esc(F().intro)}</p>
     <div class="chips" style="margin-bottom:12px"><button type="button" class="chip" id="cAllSelf">전체 동의함</button></div>
-    ${SELF_ITEMS.map(it => `<div class="field"><span class="label">${esc(it.title)} <span class="req">*</span></span>${clauseHtml(it)}${ansChips(it.key)}</div>`).join('')}
+    ${F().self.map(it => `<div class="field"><span class="label">${esc(it.title)} <span class="req">*</span></span>${clauseHtml(it)}${ansChips(it.key)}</div>`).join('')}
     <div id="selfSigBox">${sigHtml('self', '본인 서명')}</div>
   </div></section>
 
   <section class="card"><h2>대리인(가족) 작성</h2><div class="body">
     <label class="check"><input type="checkbox" id="c-proxy" data-ckey="proxy"> 대리인(가족)이 작성합니다</label>
-    <p class="note" style="margin:0">※ 대리인(가족)이 신청서 및 개인정보 수집·이용 및 제공 동의서를 작성하여 제출하는 경우에만 작성합니다.</p>
+    <p class="note" style="margin:0">${esc(F().proxyNote)}</p>
     <div id="proxyBox" hidden style="margin-top:12px">
       <div class="row">${cInput('pName', '대리인 성명', { req: true })}${cInput('pPhone', '대리인 연락처', { type: 'tel', ph: '010-0000-0000' })}</div>
       <div class="field"><span class="label">신청인과의 관계 <span class="req">*</span></span><div class="chips">${RELATIONS.map(r => `<button type="button" class="chip" aria-pressed="false" data-ckey="pRel" data-val="${esc(r)}">${esc(r)}</button>`).join('')}</div></div>
       <div id="pRelEtcBox" hidden>${cInput('pRelEtc', '기타 관계', { ph: '예: 조카' })}</div>
-      ${PROXY_ITEMS.map(it => `<div class="field"><span class="label">대리인 ${esc(it.title)} <span class="req">*</span></span>${clauseHtml(it)}${ansChips(it.key)}</div>`).join('')}
+      ${F().proxy.map(it => `<div class="field"><span class="label">대리인 ${esc(it.title)} <span class="req">*</span></span>${clauseHtml(it)}${ansChips(it.key)}</div>`).join('')}
       ${sigHtml('proxy', '대리인 서명')}
-      <div class="field" style="margin-top:18px"><span class="label">행정정보 공동이용 동의 <span class="req">*</span></span>
+      ${F().admin ? `<div class="field" style="margin-top:18px"><span class="label">행정정보 공동이용 동의 <span class="req">*</span></span>
         <div class="clause"><p>${esc(ADMIN_TEXT)}</p></div>${ansChips('admin')}<p class="note">${esc(ADMIN_NOTE)}</p></div>
       <label class="check"><input type="checkbox" id="c-adminSame" data-ckey="adminSame" checked> 위 대리인 서명을 행정정보 공동이용 동의서에도 사용</label>
-      <div id="adminSigBox" hidden>${sigHtml('admin', '대리인 서명 (행정정보 공동이용)')}</div>
+      <div id="adminSigBox" hidden>${sigHtml('admin', '대리인 서명 (행정정보 공동이용)')}</div>` : ''}
     </div>
   </div></section>`;
 
@@ -731,8 +803,13 @@ function renderConsent() {
   f.querySelectorAll('.chip[data-ckey]').forEach(b => b.addEventListener('click', onCChip));
   f.querySelectorAll('input[data-ckey]').forEach(el => el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', onCInput));
   f.querySelectorAll('[data-clear]').forEach(b => b.addEventListener('click', () => { pads[b.dataset.clear].clear(); cstate['sig_' + b.dataset.clear] = ''; cSave(); }));
-  $('cAllSelf').addEventListener('click', () => { SELF_ITEMS.forEach(it => { cstate[it.key] = '동의함'; }); cPaint(); cSave(); });
-  ['self', 'proxy', 'admin'].forEach(k => { pads[k] = makePad(k); });
+  $('cAllSelf').addEventListener('click', () => { F().self.forEach(it => { cstate[it.key] = '동의함'; }); cPaint(); cSave(); });
+  f.querySelectorAll('.chip[data-form]').forEach(b => b.addEventListener('click', () => {
+    if (cstate.form === b.dataset.form) return;
+    cstate.form = b.dataset.form; cSave(); renderConsent(); cPaint();
+  }));
+  Object.keys(pads).forEach(k => delete pads[k]);
+  ['self', 'proxy', 'admin'].forEach(k => { if ($('sig-' + k)) pads[k] = makePad(k); });
 }
 
 /* 손가락 서명 패드 */
@@ -775,9 +852,9 @@ function cPaint() {
   document.querySelectorAll('#cform .chip[data-ckey]').forEach(b => b.setAttribute('aria-pressed', cstate[b.dataset.ckey] === b.dataset.val));
   $('proxyBox').hidden = !cstate.proxy;
   $('pRelEtcBox').hidden = cstate.pRel !== '기타';
-  $('adminSigBox').hidden = cstate.adminSame !== false;
+  if ($('adminSigBox')) $('adminSigBox').hidden = cstate.adminSame !== false;
   document.querySelectorAll('.sigdate').forEach(el => { el.textContent = (cstate.date || today()).replace(/-/g, '. ') + '.'; });
-  ['self', 'proxy', 'admin'].forEach(k => { if (!cstate['sig_' + k]) pads[k].clear(); });
+  Object.keys(pads).forEach(k => { if (!cstate['sig_' + k]) pads[k].clear(); });
   requestAnimationFrame(() => Object.values(pads).forEach(p => p.fit()));
 }
 function onCChip(e) {
@@ -800,14 +877,14 @@ function cValidate() {
   const miss = [];
   if (!hasValue(cstate.name)) miss.push('성명');
   if (!hasValue(cstate.birth)) miss.push('생년월일');
-  SELF_ITEMS.forEach(it => { if (!cstate[it.key]) miss.push('본인 ' + it.title.slice(3)); });
+  F().self.forEach(it => { if (!cstate[it.key]) miss.push('본인 ' + it.title.slice(3)); });
   if (cstate.proxy) {
     if (!hasValue(cstate.pName)) miss.push('대리인 성명');
     if (!cstate.pRel) miss.push('신청인과의 관계');
-    PROXY_ITEMS.forEach(it => { if (!cstate[it.key]) miss.push('대리인 ' + it.title.slice(3)); });
+    F().proxy.forEach(it => { if (!cstate[it.key]) miss.push('대리인 ' + it.title.slice(3)); });
     if (!cstate.sig_proxy) miss.push('대리인 서명');
-    if (!cstate.admin) miss.push('행정정보 공동이용 동의');
-    if (cstate.adminSame === false && !cstate.sig_admin) miss.push('행정정보 공동이용 서명');
+    if (F().admin && !cstate.admin) miss.push('행정정보 공동이용 동의');
+    if (F().admin && cstate.adminSame === false && !cstate.sig_admin) miss.push('행정정보 공동이용 서명');
   } else if (!cstate.sig_self) miss.push('본인 서명');
   if (miss.length) { cErr('아직 안 된 항목: ' + miss.join(', ')); return false; }
   $('cErr').classList.remove('show');
@@ -816,16 +893,19 @@ function cValidate() {
 function buildConsent() {
   const c = cstate, proxy = !!c.proxy;
   return {
-    id: c._id, date: c.date || today(), staff: state.author || LS.get(KEY_AUTHOR, ''),
+    id: c._id, date: c.date || today(),
+    form: { type: c.form || 'clinic', label: F().label, no: F().no, title: F().title, section: F().section, intro: F().intro,
+      proxySection: F().proxySection, proxyNote: F().proxyNote, addressee: F().addressee },
+    staff: state.author || LS.get(KEY_AUTHOR, ''),
     person: { name: (c.name || '').trim(), birth: c.birth || '', ltcNo: c.ltcNo || '', phone: c.phone || '', addr: c.addr || '', addr2: c.addr2 || '' },
-    self: SELF_ITEMS.map(it => ({ title: it.title, lines: it.lines, answer: c[it.key] })),
+    self: F().self.map(it => ({ title: it.title, lines: it.lines, answer: c[it.key] })),
     selfSig: c.sig_self || '',
     proxy: proxy ? {
       name: c.pName || '', phone: c.pPhone || '', relation: c.pRel === '기타' ? '기타(' + (c.pRelEtc || '') + ')' : c.pRel,
-      items: PROXY_ITEMS.map(it => ({ title: it.title, lines: it.lines, answer: c[it.key] })),
+      items: F().proxy.map(it => ({ title: it.title, lines: it.lines, answer: c[it.key] })),
       sig: c.sig_proxy || '',
-      admin: c.admin, adminText: ADMIN_TEXT, adminNote: ADMIN_NOTE,
-      adminSig: c.adminSame === false ? (c.sig_admin || '') : (c.sig_proxy || '')
+      admin: F().admin ? c.admin : '', adminText: F().admin ? ADMIN_TEXT : '', adminNote: F().admin ? ADMIN_NOTE : '',
+      adminSig: !F().admin ? '' : c.adminSame === false ? (c.sig_admin || '') : (c.sig_proxy || '')
     } : null
   };
 }
@@ -836,8 +916,16 @@ async function cSend() {
   try {
     const res = await callServer('saveConsent', buildConsent());
     const link = res && res.pdfUrl ? ` <a href="${esc(res.pdfUrl)}" target="_blank" rel="noopener">동의서 PDF 열기</a>` : '';
-    flash('cOk', `✅ ${esc(cstate.name)}님 동의서를 드라이브에 저장했습니다.${res && res.demo ? ' (미리보기 — 실제 전송 안 됨)' : ''}${link}`, 15000);
+    const other = Object.keys(FORMS).find(k => k !== (cstate.form || 'clinic'));
+    flash('cOk', `✅ ${esc(cstate.name)}님 ${esc(F().label)} 동의서를 드라이브에 저장했습니다.${res && res.demo ? ' (미리보기 — 실제 전송 안 됨)' : ''}${link}
+      <br><button type="button" class="btn small" id="cNextBtn" style="margin-top:8px">같은 분 ${esc(FORMS[other].label)}도 이어서 받기</button>`, 30000);
+    const keep = { name: cstate.name, birth: cstate.birth, ltcNo: cstate.ltcNo, phone: cstate.phone, addr: cstate.addr, addr2: cstate.addr2,
+      proxy: cstate.proxy, pName: cstate.pName, pPhone: cstate.pPhone, pRel: cstate.pRel, pRelEtc: cstate.pRelEtc };
     cstate = cFresh(); LS.del(KEY_CDRAFT); cPaint();
+    $('cNextBtn').addEventListener('click', () => {
+      cstate = Object.assign(cFresh(), keep, { form: other });
+      $('cOk').classList.remove('show'); renderConsent(); cPaint(); cSave();
+    });
     window.scrollTo({ top: 0 });
   } catch (err) {
     cErr('동의서를 전송하지 못했습니다(' + (err && err.message ? err.message : '네트워크') + '). 작성한 내용과 서명은 휴대폰에 남아 있으니 잠시 후 다시 [동의서 전송]을 눌러 주세요.');
@@ -868,8 +956,8 @@ function showTab(tab) {
   window.scrollTo({ top: 0 });
 }
 function initConsent() {
-  renderConsent();
   cstate = Object.assign(cFresh(), LS.get(KEY_CDRAFT, {}));
+  renderConsent();
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
   $('cSendBtn').addEventListener('click', cSend);
   $('cResetBtn').addEventListener('click', cReset);

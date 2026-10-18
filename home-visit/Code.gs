@@ -451,7 +451,7 @@ function createConsentPdf_(folder, c) {
     ], [0]).editAsText().setFontSize(9);
 
     para_(body, f.section || '[ 개인정보 수집·이용 및 제공 동의서 ]', { heading: H.HEADING2 });
-    para_(body, f.intro || '', { size: 9 });
+    if (f.intro) para_(body, f.intro, { size: 9 });
     consentItems_(body, c.self || []);
     para_(body, dateText, { align: A.RIGHT, bold: true });
     signLine_(body, '본인 성명', p.name, c.selfSig);
@@ -467,6 +467,19 @@ function createConsentPdf_(folder, c) {
       signLine_(body, '대리인 성명', px.name, px.sig);
       para_(body, '- 주민등록번호, 외국인등록번호는 국민건강보험법 시행령 제81조(민감정보 및 고유식별 정보의 처리), 노인장기요양법 시행령 제28조의3(민감정보 및 고유식별정보의 처리)등에 따라 처리합니다.', { size: 8 });
       para_(body, '- 대리인의 범위는 노인장기요양보험법 제22조(장기요양인정 신청 등에 대한 대리) 및 민법 제779조(가족의 범위)에 따른 가족으로서 배우자, 직계혈족 및 형제자매, 생계를 같이하는 직계혈족의 배우자, 생계를 같이하는 배우자의 직계혈족 및 배우자의 형제자매를 뜻하며 신청 시 대리인 신분증 확인 및 위임장 제출이 필요합니다.', { size: 8 });
+      if (f.methodTable) {
+        const mt = body.appendTable([
+          ['신청방법', '신청자', '증빙서류 확인방법'],
+          ['지사방문(내방)', '신청인(본인)', '- 신청인의 신분증 제시'],
+          ['지사방문(내방)', '대리인(가족)', '- 신청인 및 대리인(가족)의 신분증 제시\n- 신청인(본인)의 개인정보 수집·이용·제3자 제공 동의에 대한 위임장'],
+          ['우편접수', '신청인(본인)', '- 신청인의 신분증 사본 제출'],
+          ['우편접수', '대리인(가족)', '- 신청인 및 대리인(가족)의 신분증 사본 제출\n- 신청인(본인)의 개인정보 수집·이용·제3자 제공 동의에 대한 위임장']
+        ]);
+        mt.setBorderColor('#5f6368');
+        mt.editAsText().setFontSize(8);
+        [0, 1, 2].forEach(k => styleLabelCell_(mt.getRow(0).getCell(k)));
+        para_(body, '- 대리인(가족)이 신청서 및 개인정보 수집·이용·제3자 제공 동의서를 작성할 경우에만 대리인의 정보를 수집·이용·제3자 제공합니다.', { size: 8 });
+      }
 
       if (px.adminText) {
         para_(body, '행정정보 공동이용 동의서', { heading: H.HEADING2, align: A.CENTER });

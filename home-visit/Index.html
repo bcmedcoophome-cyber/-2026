@@ -641,13 +641,13 @@ const SELF_ITEMS = [
     '③ 민감정보 보유 및 이용기간 : 5년',
     '④ ' + REFUSE.replace('{x}', '민감정보 수집·이용')] },
   { key: 'c3', title: '3. 개인정보 제3자 제공', lines: [
-    '① 개인정보를 제공받는 자 : ' + RECEIVER,
+    '① 개인정보를 제공받는 자 : ',
     '② 개인정보를 제공받는 자의 수집·이용 목적 : ' + PURPOSE_3RD,
     '③ 제3자가 제공받는 개인정보의 항목 : 성명, 생년월일, 집주소, 연락처, 장기요양 감경기준 적용여부',
     '④ 제3자의 개인정보 보유 및 이용기간 : 5년',
     '⑤ ' + REFUSE.replace('{x}', '개인정보 제3자 제공')] },
   { key: 'c4', title: '4. 민감정보 제3자 제공', lines: [
-    '① 민감정보를 제공받는 자 : ' + RECEIVER,
+    '① 민감정보를 제공받는 자 : 시범사업 참여 의료기관',
     '② 민감정보를 제공받는 자의 수집·이용 목적 : ' + PURPOSE_3RD,
     '③ 제3자가 제공받는 민감정보의 항목 : 장기요양(인정번호, 인정등급, 인정유효기간) 정보, 일차의료 만성질환관리·장애인 건강주치의 시범사업 이용여부(이용자에 한함)',
     '④ 제3자의 민감정보 보유 및 이용기간 : 5년',
@@ -660,7 +660,7 @@ const PROXY_ITEMS = [
     '③ 개인정보 보유 및 이용기간 : 5년',
     '④ ' + REFUSE.replace('{x}', '개인정보 수집·이용')] },
   { key: 'p2', title: '2. 개인정보 제3자 제공', lines: [
-    '① 개인정보를 제공받는 제3자 : ' + RECEIVER,
+    '① 개인정보를 제공받는 제3자 : 시범사업 참여 의료기관',
     '② 개인정보를 제공받는 제3자의 수집·이용 목적 : ' + PURPOSE_3RD,
     '③ 제3자가 제공받는 개인정보의 항목 : 대리인 정보(성명, 연락처, 신청인과의 관계)',
     '④ 제3자의 개인정보 보유 및 이용기간 : 5년',
@@ -719,6 +719,14 @@ const CENTER_NAME = '○○'; // 귀중 문구의 기관명 — 예: '○○의�
 
 const RELATIONS = ['배우자', '자녀(며느리, 사위 포함)', '부모', '형제자매', '손자녀(손부, 손서 포함)', '조부모(외조부모 포함)', '기타'];
 const FORMS = {
+  nhis: { label: '공단용', no: '[별지 제1호 서식]',
+    title: '「장기요양 재택의료센터 시범사업」 참여를 위한\n신청서 및 개인정보 수집·이용 및 제공 동의서 (공단용)',
+    section: '[ 개인정보 수집·이용 및 제공 동의서 ]',
+    intro: '', methodTable: true,
+    proxySection: '[ 대리인의 개인정보 수집·이용 및 제공 동의서 ]',
+    proxyNote: '※ 대리인(가족)이 신청서 및 개인정보 수집·이용 및 제공 동의서를 작성하여 제출하는 경우에만 작성합니다.',
+    self: SELF_ITEMS, proxy: PROXY_ITEMS, admin: true,
+    addressee: '국민건강보험공단 귀중' },
   clinic: { label: '의료기관용', no: '[별지 제2호 서식]',
     title: '「장기요양 재택의료센터 시범사업」 참여를 위한\n신청서 및 개인정보 수집·이용·제3자 제공 동의서 (의료기관용)',
     section: '[ 개인정보 수집·이용·제3자 제공 동의서 ]',
@@ -726,24 +734,16 @@ const FORMS = {
     proxySection: '[ 대리인의 개인정보 수집·이용·제3자 제공 동의서 ]',
     proxyNote: '※ 대리인(가족)이 신청서 및 개인정보 수집·이용·제3자 제공 동의서를 작성하여 제출하는 경우에만 작성합니다.',
     self: C_SELF, proxy: C_PROXY, admin: false,
-    addressee: '장기요양 재택의료센터 시범기관 ' + CENTER_NAME + ' 기관장 귀중' },
-  nhis: { label: '공단용', no: '[별지 제1호 서식]',
-    title: '「장기요양 재택의료센터 시범사업」 참여를 위한\n신청서 및 개인정보 수집·이용 및 제공 동의서 (공단용)',
-    section: '[ 개인정보 수집·이용 및 제공 동의서 ]',
-    intro: '「장기요양 재택의료센터 시범사업」 참여를 위하여 아래의 개인정보 수집·이용 및 제공에 대한 내용을 자세히 읽어 보신 후 동의 여부를 결정하여 주시기 바랍니다.',
-    proxySection: '[ 대리인의 개인정보 수집·이용 및 제공 동의서 ]',
-    proxyNote: '※ 대리인(가족)이 신청서 및 개인정보 수집·이용 및 제공 동의서를 작성하여 제출하는 경우에만 작성합니다.',
-    self: SELF_ITEMS, proxy: PROXY_ITEMS, admin: true,
-    addressee: '국민건강보험공단 귀중' }
+    addressee: '장기요양 재택의료센터 시범기관 ' + CENTER_NAME + ' 기관장 귀중' }
 };
-function F() { return FORMS[cstate.form] || FORMS.clinic; }
+function F() { return FORMS[cstate.form] || FORMS.nhis; }
 const ANS = ['동의함', '동의안함'];
 const KEY_CDRAFT = 'hv_consent_draft';
 let cstate = {};
 const pads = {};
 
 function cFresh() {
-  return { _id: uid(), date: today(), form: (cstate && cstate.form) || 'clinic', name: (state.patient || '').trim(), birth: state.birth || '' };
+  return { _id: uid(), date: today(), form: (cstate && cstate.form) || 'nhis', name: (state.patient || '').trim(), birth: state.birth || '' };
 }
 function clauseHtml(it) {
   return `<div class="clause">${it.lines.map(l => `<p>${esc(l)}</p>`).join('')}</div>`;
@@ -765,7 +765,7 @@ function sigHtml(key, label) {
 function renderConsent() {
   $('cform').innerHTML = `
   <section class="card"><h2>동의서 종류</h2><div class="body">
-    <div class="chips">${Object.keys(FORMS).map(k => `<button type="button" class="chip" data-form="${k}" aria-pressed="${(cstate.form || 'clinic') === k}">${FORMS[k].label}</button>`).join('')}</div>
+    <div class="chips">${Object.keys(FORMS).map(k => `<button type="button" class="chip" data-form="${k}" aria-pressed="${(cstate.form || 'nhis') === k}">${FORMS[k].label}</button>`).join('')}</div>
     <p class="note">${esc(F().no)} ${esc(F().title.replace('\n', ' '))}</p>
   </div></section>
   <section class="card"><h2>신청서 (정보주체 본인)</h2><div class="body">
@@ -777,7 +777,7 @@ function renderConsent() {
   </div></section>
 
   <section class="card"><h2>${esc(F().section.replace(/[\[\]]/g, '').trim())} (본인)</h2><div class="body">
-    <p class="note" style="margin:0 0 10px">${esc(F().intro)}</p>
+    ${F().intro ? `<p class="note" style="margin:0 0 10px">${esc(F().intro)}</p>` : ''}
     <div class="chips" style="margin-bottom:12px"><button type="button" class="chip" id="cAllSelf">전체 동의함</button></div>
     ${F().self.map(it => `<div class="field"><span class="label">${esc(it.title)} <span class="req">*</span></span>${clauseHtml(it)}${ansChips(it.key)}</div>`).join('')}
     <div id="selfSigBox">${sigHtml('self', '본인 서명')}</div>
@@ -894,7 +894,7 @@ function buildConsent() {
   const c = cstate, proxy = !!c.proxy;
   return {
     id: c._id, date: c.date || today(),
-    form: { type: c.form || 'clinic', label: F().label, no: F().no, title: F().title, section: F().section, intro: F().intro,
+    form: { type: c.form || 'nhis', label: F().label, methodTable: !!F().methodTable, no: F().no, title: F().title, section: F().section, intro: F().intro,
       proxySection: F().proxySection, proxyNote: F().proxyNote, addressee: F().addressee },
     staff: state.author || LS.get(KEY_AUTHOR, ''),
     person: { name: (c.name || '').trim(), birth: c.birth || '', ltcNo: c.ltcNo || '', phone: c.phone || '', addr: c.addr || '', addr2: c.addr2 || '' },
@@ -916,7 +916,7 @@ async function cSend() {
   try {
     const res = await callServer('saveConsent', buildConsent());
     const link = res && res.pdfUrl ? ` <a href="${esc(res.pdfUrl)}" target="_blank" rel="noopener">동의서 PDF 열기</a>` : '';
-    const other = Object.keys(FORMS).find(k => k !== (cstate.form || 'clinic'));
+    const other = Object.keys(FORMS).find(k => k !== (cstate.form || 'nhis'));
     flash('cOk', `✅ ${esc(cstate.name)}님 ${esc(F().label)} 동의서를 드라이브에 저장했습니다.${res && res.demo ? ' (미리보기 — 실제 전송 안 됨)' : ''}${link}
       <br><button type="button" class="btn small" id="cNextBtn" style="margin-top:8px">같은 분 ${esc(FORMS[other].label)}도 이어서 받기</button>`, 30000);
     const keep = { name: cstate.name, birth: cstate.birth, ltcNo: cstate.ltcNo, phone: cstate.phone, addr: cstate.addr, addr2: cstate.addr2,

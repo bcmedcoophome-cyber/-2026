@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>생애말기기록</title>
+<meta name="theme-color" content="#e8775b">
+<meta name="apple-mobile-web-app-title" content="생애말기기록">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script>
+  /*
+   * 생애말기 활동기록 — 짧은 주소 + 홈 화면 아이콘용 시작 페이지.
+   * 홈 화면 아이콘으로 열면(독립 실행 화면) 바로 앱(Apps Script 웹앱)으로 넘어갑니다.
+   * 인터넷 창(사파리/크롬 탭)에서는 넘어가지 않고 안내를 보여 줍니다.
+   * (탭에서 넘어가 버리면 '홈 화면에 추가' 때 구글 아이콘이 붙기 때문)
+   */
+  var APP_URL = 'https://script.google.com/macros/s/AKfycbxJB7JPtbuJJgV3srdDztEYmSqZ8Hyenvyr-7LKnE_CbMKv8HLZvS1lRK6t8bR5blw1/exec';
+  var standalone = window.navigator.standalone === true ||
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  if (standalone) location.replace(APP_URL);
+</script>
+<style>
+  :root { --bg: #fff6f2; --card: #fff; --ink: #2a1a15; --muted: #6b5149; --line: #f0d6cc; --brand: #c8553a; --brand-ink: #fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1c1412; --card: #2a1e1a; --ink: #f6ece8; --muted: #cdb7ae; --line: #4a332b; --brand: #ffb39f; --brand-ink: #2a120b; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 20px/1.55 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 28px 16px calc(28px + env(safe-area-inset-bottom)); display: grid; gap: 18px; }
+  .head { display: flex; align-items: center; gap: 16px; }
+  .head img { width: 76px; height: 76px; border-radius: 18px; }
+  h1 { font-size: 26px; margin: 0; }
+  .sub { color: var(--muted); font-size: 17px; margin: 2px 0 0; }
+  .btn { display: block; width: 100%; text-align: center; font: inherit; font-size: 22px; font-weight: 700; padding: 18px;
+    border-radius: 16px; border: 0; background: var(--brand); color: var(--brand-ink); text-decoration: none; cursor: pointer; }
+  .btn.ghost { background: transparent; color: var(--brand); border: 2px solid var(--brand); }
+  .card { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 18px; display: grid; gap: 12px; }
+  .card h2 { font-size: 21px; margin: 0; }
+  ol { margin: 0; padding-left: 24px; display: grid; gap: 8px; }
+  .small { font-size: 15px; color: var(--muted); margin: 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="head">
+    <img src="icon-192.png" alt="">
+    <div>
+      <h1>생애말기 활동기록</h1>
+      <p class="sub">생애말기 돌봄 활동가 방문 기록</p>
+    </div>
+  </div>
+
+  <a class="btn" id="openBtn" href="#">기록 앱 열기</a>
+  <button class="btn ghost" type="button" id="installBtn" hidden>📲 홈 화면에 아이콘 만들기</button>
+
+  <section class="card">
+    <h2>📲 홈 화면에 아이콘 만들기</h2>
+    <ol id="android">
+      <li>크롬 오른쪽 위 <b>⋮</b> (점 3개)를 누릅니다</li>
+      <li><b>홈 화면에 추가</b> (또는 <b>앱 설치</b>)를 누릅니다</li>
+      <li><b>추가</b>를 누르면 살구색 손잡은 아이콘이 생깁니다</li>
+    </ol>
+    <ol id="ios" hidden>
+      <li>사파리 아래쪽 <b>공유 버튼 ⬆</b>을 누릅니다</li>
+      <li>아래로 내려 <b>홈 화면에 추가</b>를 누릅니다</li>
+      <li>오른쪽 위 <b>추가</b>를 누르면 살구색 손잡은 아이콘이 생깁니다</li>
+    </ol>
+    <p class="small" id="iosNote" hidden>※ 아이폰은 <b>사파리</b>에서 열어야 홈 화면에 추가할 수 있습니다.</p>
+    <p class="small">이 화면에서 바로 추가하세요. 다음부터는 홈 화면의 손잡은 아이콘을 누르면 기록 앱이 바로 열립니다.</p>
+  </section>
+</main>
+<script>
+  document.getElementById('openBtn').href = APP_URL;
+  var ua = navigator.userAgent || '';
+  var isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS) {
+    document.getElementById('android').hidden = true;
+    document.getElementById('ios').hidden = false;
+    document.getElementById('iosNote').hidden = false;
+  }
+  // 안드로이드 크롬: 바로 설치 버튼
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferred = e;
+    document.getElementById('installBtn').hidden = false;
+  });
+  document.getElementById('installBtn').addEventListener('click', function () {
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.then(function () { deferred = null; document.getElementById('installBtn').hidden = true; });
+  });
+</script>
+</body>
+</html>

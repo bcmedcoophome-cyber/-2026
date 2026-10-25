@@ -121,7 +121,13 @@
     <div id="pickBox">
       <p class="hint" id="pickHint">우리 팀을 먼저 누르세요</p>
       <div class="chips" id="teamChips"></div>
-      <div class="chips" id="nameChips" style="margin-top:12px"></div>
+      <div id="nameBox" hidden style="margin-top:14px">
+        <p class="hint" style="margin:0 0 8px">내 이름을 적고 [확인]을 누르세요</p>
+        <div style="display:flex;gap:10px">
+          <input type="text" id="meInput" aria-label="내 이름" placeholder="예: 홍길동" autocomplete="name" style="flex:1">
+          <button type="button" class="btn primary" id="meOk">확인</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -154,14 +160,9 @@
 
 <script>
 /* =====================================================================
- *  활동가 명단 — 팀 → 이름. 사람이 바뀌면 이 부분만 고치면 됩니다.
+ *  활동가 팀 — 팀이 바뀌면 이 부분만 고치면 됩니다. (이름은 각자 직접 입력)
  * ===================================================================== */
-const TEAMS = [
-  { team: '따품안', names: ['이명옥', '심윤재', '박향숙', '박동옥'] },
-  { team: '임종하면', names: ['임종하', '최종순', '김동수', '한복주', '김현미', '김명옥'] },
-  { team: '해바라기', names: ['이경화', '신금순', '이현순', '최해자', '조미선'] },
-  { team: '햇살동행', names: ['홍경기', '김은아', '양승미', '정인희', '윤서연'] }
-];
+const TEAMS = ['따품안', '임종하면', '해바라기', '햇살동행'];
 
 /* =====================================================================
  *  기록 항목 — label은 시트의 열 이름이 되므로 서로 겹치지 않게 해주세요.
@@ -169,7 +170,7 @@ const TEAMS = [
  *  showIf: 다른 항목이 특정 값일 때만 보임
  * ===================================================================== */
 const KIND = { name: '방문기록지', filePrefix: '생애말기활동가기록지', docTitle: '생애말기활동가기록지' };
-const UI_VERSION = '2026-10-25b'; // 화면 버전 (GitHub에서 고치면 올림)
+const UI_VERSION = '2026-10-25c'; // 화면 버전 (GitHub에서 고치면 올림)
 const FORM = [
   { key: 'date', label: '방문날짜', type: 'date', required: true },
   { key: 'elder', label: '어르신 이름', type: 'text', required: true, placeholder: '어르신 성함' },
@@ -209,11 +210,9 @@ function visible(f) { return !f.showIf || Object.keys(f.showIf).every(k => state
 /* ---------- 활동가 고르기 ---------- */
 function renderTeams() {
   $('teamChips').innerHTML = TEAMS.map(t =>
-    `<button type="button" class="chip" data-team="${esc(t.team)}" aria-pressed="${t.team === pickTeam}">${esc(t.team)}</button>`).join('');
-  const t = TEAMS.find(x => x.team === pickTeam);
-  $('nameChips').innerHTML = t ? t.names.map(n =>
-    `<button type="button" class="chip" data-name="${esc(n)}" aria-pressed="false">${esc(n)}</button>`).join('') : '';
-  $('pickHint').textContent = t ? '내 이름을 누르세요' : '우리 팀을 먼저 누르세요';
+    `<button type="button" class="chip" data-team="${esc(t)}" aria-pressed="${t === pickTeam}">${esc(t)}</button>`).join('');
+  $('nameBox').hidden = !pickTeam;
+  $('pickHint').textContent = pickTeam ? pickTeam + ' 팀을 골랐습니다' : '우리 팀을 먼저 누르세요';
 }
 function paintMe() {
   const has = hasValue(state.author);
@@ -223,15 +222,20 @@ function paintMe() {
   $('meTeam').textContent = state.team ? state.team + ' 팀' : '';
   if (!has) renderTeams();
 }
-function onTeamOrName(e) {
+function onTeam(e) {
   const b = e.target.closest('.chip');
-  if (!b) return;
-  if (b.dataset.team) { pickTeam = b.dataset.team; renderTeams(); return; }
-  if (b.dataset.name) {
-    state.author = b.dataset.name; state.team = pickTeam;
-    LS.set(KEY_ME, { name: state.author, team: state.team });
-    paintMe(); renderElderChips(); updateProgress(); saveDraft();
-  }
+  if (!b || !b.dataset.team) return;
+  const first = !pickTeam;
+  pickTeam = b.dataset.team; renderTeams();
+  if (first) setTimeout(() => $('meInput').focus(), 50);
+}
+function onMeOk() {
+  const name = $('meInput').value.replace(/\s+/g, ' ').trim();
+  if (name.length < 2) { showError('내 이름을 적어 주세요.'); $('meInput').focus(); return; }
+  state.author = name; state.team = pickTeam;
+  LS.set(KEY_ME, { name: state.author, team: state.team });
+  $('errBanner').classList.remove('show');
+  paintMe(); renderElderChips(); updateProgress(); saveDraft();
 }
 
 /* ---------- 화면 그리기 ---------- */
@@ -568,10 +572,11 @@ function init() {
   if (!IS_GAS) $('demoBanner').classList.add('show');
   showQueue(); showSaved();
 
-  $('teamChips').addEventListener('click', onTeamOrName);
-  $('nameChips').addEventListener('click', onTeamOrName);
+  $('teamChips').addEventListener('click', onTeam);
+  $('meOk').addEventListener('click', onMeOk);
+  $('meInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); onMeOk(); } });
   $('changeMe').addEventListener('click', () => {
-    pickTeam = state.team || ''; state.author = ''; state.team = '';
+    pickTeam = state.team || ''; $('meInput').value = state.author || ''; state.author = ''; state.team = '';
     LS.del(KEY_ME); paint(); renderElderChips(); saveDraft();
   });
   $('sendBtn').addEventListener('click', () => {

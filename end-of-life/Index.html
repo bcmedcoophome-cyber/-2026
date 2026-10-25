@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>생애말기 활동기록</title>
+<style>
+  :root {
+    --bg: #f4f6f8; --card: #fff; --ink: #111827; --muted: #4b5563; --line: #c9d0d8;
+    --brand: #1557b0; --brand-ink: #fff; --brand-soft: #e3edfb;
+    --danger: #b3261e; --danger-soft: #fde7e5; --ok: #146c2e; --ok-soft: #e3f4e8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121417; --card: #1c1f24; --ink: #f1f3f4; --muted: #c4c9cf; --line: #3c434b;
+      --brand: #8ab4f8; --brand-ink: #0b1220; --brand-soft: #1f2a3d;
+      --danger: #f28b82; --danger-soft: #3b1f1d; --ok: #81c995; --ok-soft: #1b3122;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 20px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; }
+  header { position: sticky; top: 0; z-index: 10; background: var(--card); border-bottom: 1px solid var(--line);
+    padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: 22px; margin: 0; flex: 1; }
+  #progress { font-size: 17px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+  #progress.done { color: var(--ok); }
+  main { max-width: 640px; margin: 0 auto; padding: 14px 16px 180px; }
+
+  .banner { border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; font-size: 19px; display: none; }
+  .banner.show { display: block; }
+  .banner.info { background: var(--brand-soft); }
+  .banner.danger { background: var(--danger-soft); color: var(--danger); font-weight: 700; }
+  .banner.ok { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+  .banner a { color: inherit; font-weight: 700; }
+  .banner .btn { margin-top: 10px; width: 100%; }
+
+  section.card { background: var(--card); border: 2px solid var(--line); border-radius: 16px; margin-bottom: 16px; padding: 16px; }
+  section.card.missing { border-color: var(--danger); }
+  section.card h2 { margin: 0 0 12px; font-size: 22px; display: flex; align-items: center; gap: 8px; }
+  section.card h2 .num { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%;
+    background: var(--brand-soft); color: var(--brand); font-size: 18px; flex: none; }
+  section.card h2 .tick { margin-left: auto; color: var(--ok); font-size: 26px; }
+  .hint { font-size: 17px; color: var(--muted); margin: -4px 0 12px; }
+
+  input[type=text], input[type=date], textarea {
+    width: 100%; font: inherit; font-size: 22px; color: var(--ink); background: var(--bg);
+    border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; min-height: 60px; }
+  textarea { min-height: 140px; resize: vertical; line-height: 1.5; }
+  input:focus, textarea:focus { outline: 3px solid var(--brand); border-color: transparent; }
+
+  .chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  .chip { border: 2px solid var(--line); background: var(--card); color: var(--ink); border-radius: 14px;
+    padding: 10px 8px; font: inherit; font-size: 21px; font-weight: 600; min-height: 64px; cursor: pointer; }
+  .chip[aria-pressed=true] { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+  .chip[aria-pressed=true]::before { content: "✓ "; }
+  .chip.danger[aria-pressed=true] { background: var(--danger); border-color: var(--danger); }
+  .phrases { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .phrase { font: inherit; font-size: 18px; border: 2px dashed var(--line); background: transparent; color: var(--ink);
+    border-radius: 12px; padding: 10px 14px; min-height: 52px; cursor: pointer; }
+  .voice { font-size: 17px; color: var(--muted); margin-top: 8px; }
+
+  .me { display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 700; }
+  .me small { display: block; font-size: 17px; font-weight: 400; color: var(--muted); }
+  .me > div { flex: 1; }
+
+  .btn { font: inherit; font-size: 20px; font-weight: 700; border-radius: 14px; padding: 12px 16px; min-height: 60px;
+    border: 2px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+  .btn.primary { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+  .btn.warn { background: var(--danger); color: #fff; border-color: var(--danger); }
+  .btn.small { min-height: 52px; font-size: 18px; padding: 8px 14px; }
+  .btn:disabled { opacity: .5; }
+
+  footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 2px solid var(--line);
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); z-index: 10; }
+  footer .inner { max-width: 640px; margin: 0 auto; display: flex; gap: 8px; }
+  footer .btn { flex: 1; min-height: 68px; font-size: 22px; padding: 8px; }
+  footer .btn.primary { flex: 1.5; }
+  #footState { font-size: 15px; color: var(--muted); text-align: center; margin-top: 6px; }
+
+  dialog { border: none; border-radius: 18px; padding: 0; width: min(560px, calc(100vw - 20px)); background: var(--card); color: var(--ink); }
+  dialog::backdrop { background: rgba(0,0,0,.5); }
+  dialog .d-head { padding: 16px; font-size: 22px; font-weight: 700; border-bottom: 1px solid var(--line); }
+  dialog pre { margin: 0; padding: 16px; white-space: pre-wrap; word-break: keep-all; font: inherit; font-size: 20px;
+    max-height: 56vh; overflow: auto; }
+  dialog .d-foot { display: flex; gap: 10px; padding: 14px 16px; border-top: 1px solid var(--line); }
+  dialog .d-foot .btn { flex: 1; min-height: 64px; }
+  .saved-item { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .saved-item .who { font-size: 21px; font-weight: 700; }
+  .saved-item .who small { display: block; font-size: 16px; font-weight: 400; color: var(--muted); }
+  .saved-item .acts { display: flex; gap: 8px; margin-top: 8px; }
+  .saved-item .acts .btn { flex: 1; }
+  #savedList { max-height: 60vh; overflow: auto; }
+  #savedList:empty::before { content: "저장된 기록이 없습니다."; display: block; padding: 16px; color: var(--muted); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🕊 생애말기 활동기록</h1>
+  <span id="progress"></span>
+</header>
+
+<main>
+  <div id="demoBanner" class="banner info">미리보기 화면입니다. 구글 Apps Script로 배포해야 드라이브에 저장됩니다.</div>
+  <div id="errBanner" class="banner danger"></div>
+  <div id="okBanner" class="banner ok"></div>
+  <div id="queueBanner" class="banner info"><span id="queueText"></span>
+    <button class="btn primary" type="button" id="retryBtn">다시 보내기</button></div>
+  <div id="savedBanner" class="banner info"><span id="savedText"></span>
+    <button class="btn" type="button" id="savedOpenBtn">저장한 기록 보기</button></div>
+
+  <!-- 1. 활동가 본인 -->
+  <section class="card" data-sec="author">
+    <h2><span class="num">1</span>내 이름<span class="tick" id="tick-author"></span></h2>
+    <div id="meBox" class="me" hidden>
+      <div><span id="meName"></span><small id="meTeam"></small></div>
+      <button class="btn small" type="button" id="changeMe">바꾸기</button>
+    </div>
+    <div id="pickBox">
+      <p class="hint" id="pickHint">우리 팀을 먼저 누르세요</p>
+      <div class="chips" id="teamChips"></div>
+      <div class="chips" id="nameChips" style="margin-top:12px"></div>
+    </div>
+  </section>
+
+  <form id="form" autocomplete="off" onsubmit="return false"></form>
+</main>
+
+<footer>
+  <div class="inner">
+    <button class="btn" type="button" id="newBtn">NEW</button>
+    <button class="btn" type="button" id="saveBtn">저장</button>
+    <button class="btn primary" type="button" id="sendBtn">전송</button>
+  </div>
+  <div id="footState">저장: 휴대폰·시트에 임시저장 · 전송: 기록지 만들기</div>
+</footer>
+
+<dialog id="confirmDlg">
+  <div class="d-head">이대로 보낼까요?</div>
+  <pre id="summary"></pre>
+  <div class="d-foot">
+    <button class="btn" type="button" id="cancelBtn">고치기</button>
+    <button class="btn primary" type="button" id="confirmBtn">보내기</button>
+  </div>
+</dialog>
+
+<dialog id="savedDlg">
+  <div class="d-head">저장한 기록 (아직 안 보냄)</div>
+  <div id="savedList"></div>
+  <div class="d-foot"><button class="btn" type="button" id="savedCloseBtn">닫기</button></div>
+</dialog>
+
+<script>
+/* =====================================================================
+ *  활동가 명단 — 팀 → 이름. 사람이 바뀌면 이 부분만 고치면 됩니다.
+ * ===================================================================== */
+const TEAMS = [
+  { team: '따품안', names: ['이명옥', '심윤재', '박향숙', '박동옥'] },
+  { team: '임종하면', names: ['임종하', '최종순', '김동수', '한복주', '김현미', '김명옥'] },
+  { team: '해바라기', names: ['이경화', '신금순', '이현순', '최해자', '조미선'] },
+  { team: '햇살동행', names: ['홍경기', '김은아', '양승미', '정인희', '윤서연'] }
+];
+
+/* =====================================================================
+ *  기록 항목 — label은 시트의 열 이름이 되므로 서로 겹치지 않게 해주세요.
+ *  type: text | date | single(하나만) | multi(여러 개) | memo(긴 글)
+ *  showIf: 다른 항목이 특정 값일 때만 보임
+ * ===================================================================== */
+const FORM = [
+  { key: 'date', label: '방문날짜', type: 'date', required: true },
+  { key: 'elder', label: '어르신 이름', type: 'text', required: true, placeholder: '어르신 성함' },
+  { key: 'partner', label: '대화상대', type: 'multi', required: true, hint: '여러 개 눌러도 됩니다',
+    options: ['대상자 본인', '자녀', '요양보호사', '배우자', '기타'] },
+  { key: 'mood', label: '대상자 기분·상태', type: 'multi', required: true, hint: '여러 개 눌러도 됩니다',
+    options: ['활발', '우울', '무기력', '수면', '통증', '기타'] },
+  { key: 'medical', label: '의료진 전달사항', type: 'single', required: true, options: ['없음', '있음'], danger: '있음' },
+  { key: 'medicalNote', label: '전달 내용', type: 'memo', required: true, showIf: { medical: '있음' },
+    hint: '의료진에게 알릴 내용을 적어 주세요' },
+  { key: 'memo', label: '활동 내용·특이사항', type: 'memo',
+    phrases: ['말벗 해드림.', '손 마사지 해드림.', '산책 함께 함.', '가족과 이야기 나눔.', '특이사항 없음.'] }
+];
+
+/* ======================== 이하 동작 코드 ======================== */
+const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+const KEY_ME = 'eol_me', KEY_DRAFT = 'eol_draft', KEY_SAVED = 'eol_saved', KEY_QUEUE = 'eol_queue', KEY_ELDERS = 'eol_elders';
+const $ = id => document.getElementById(id);
+let state = {};
+let pickTeam = '';
+let serverElders = [];
+
+function today() {
+  const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+}
+function uid() { return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function hasValue(v) { return Array.isArray(v) ? v.length > 0 : !!(v && String(v).trim()); }
+function visible(f) { return !f.showIf || Object.keys(f.showIf).every(k => state[k] === f.showIf[k]); }
+
+/* ---------- 활동가 고르기 ---------- */
+function renderTeams() {
+  $('teamChips').innerHTML = TEAMS.map(t =>
+    `<button type="button" class="chip" data-team="${esc(t.team)}" aria-pressed="${t.team === pickTeam}">${esc(t.team)}</button>`).join('');
+  const t = TEAMS.find(x => x.team === pickTeam);
+  $('nameChips').innerHTML = t ? t.names.map(n =>
+    `<button type="button" class="chip" data-name="${esc(n)}" aria-pressed="false">${esc(n)}</button>`).join('') : '';
+  $('pickHint').textContent = t ? '내 이름을 누르세요' : '우리 팀을 먼저 누르세요';
+}
+function paintMe() {
+  const has = hasValue(state.author);
+  $('meBox').hidden = !has;
+  $('pickBox').hidden = has;
+  $('meName').textContent = state.author || '';
+  $('meTeam').textContent = state.team ? state.team + ' 팀' : '';
+  if (!has) renderTeams();
+}
+function onTeamOrName(e) {
+  const b = e.target.closest('.chip');
+  if (!b) return;
+  if (b.dataset.team) { pickTeam = b.dataset.team; renderTeams(); return; }
+  if (b.dataset.name) {
+    state.author = b.dataset.name; state.team = pickTeam;
+    LS.set(KEY_ME, { name: state.author, team: state.team });
+    paintMe(); renderElderChips(); updateProgress(); saveDraft();
+  }
+}
+
+/* ---------- 화면 그리기 ---------- */
+function render() {
+  let num = 1; // 1번은 '내 이름'
+  $('form').innerHTML = FORM.map(f => {
+    if (!f.showIf) num++;
+    return `<section class="card" data-sec="${f.key}" ${f.showIf ? 'data-sub="1"' : ''}>
+      <h2>${f.showIf ? '' : `<span class="num">${num}</span>`}${esc(f.label)}<span class="tick" id="tick-${f.key}"></span></h2>
+      ${f.hint ? `<p class="hint">${esc(f.hint)}</p>` : ''}
+      ${renderField(f)}
+    </section>`;
+  }).join('');
+  const form = $('form');
+  form.querySelectorAll('.chip[data-key]').forEach(b => b.addEventListener('click', onChip));
+  form.querySelectorAll('input, textarea').forEach(el => el.addEventListener('input', onInput));
+  form.querySelectorAll('.phrase').forEach(b => b.addEventListener('click', onPhrase));
+  $('elderChips').addEventListener('click', e => {
+    const b = e.target.closest('[data-elder]');
+    if (!b) return;
+    state.elder = b.dataset.elder; paint(); saveDraft();
+  });
+  $('todayBtn').addEventListener('click', () => { state.date = today(); paint(); saveDraft(); });
+}
+
+function renderField(f) {
+  const id = 'f-' + f.key;
+  if (f.type === 'single' || f.type === 'multi') {
+    return `<div class="chips" role="group" aria-label="${esc(f.label)}">` + f.options.map(o =>
+      `<button type="button" class="chip${o === f.danger ? ' danger' : ''}" aria-pressed="false" data-key="${f.key}" data-val="${esc(o)}">${esc(o)}</button>`).join('') + `</div>`;
+  }
+  if (f.type === 'memo') {
+    return `<textarea id="${id}" data-key="${f.key}" aria-label="${esc(f.label)}" placeholder="여기를 눌러 적어 주세요"></textarea>
+      <div class="voice">🎤 키보드의 마이크를 누르면 말로 입력할 수 있어요</div>
+      ${f.phrases ? `<div class="phrases">${f.phrases.map(p => `<button type="button" class="phrase" data-key="${f.key}" data-val="${esc(p)}">+ ${esc(p)}</button>`).join('')}</div>` : ''}`;
+  }
+  if (f.type === 'date') {
+    return `<div style="display:flex;gap:10px"><input id="${id}" type="date" data-key="${f.key}" aria-label="${esc(f.label)}" style="flex:1">
+      <button type="button" class="btn small" id="todayBtn">오늘</button></div>`;
+  }
+  return `<input id="${id}" type="text" data-key="${f.key}" aria-label="${esc(f.label)}"${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ''}>
+    ${f.key === 'elder' ? '<p class="hint" id="elderHint" style="margin:10px 0 6px" hidden>전에 만난 어르신 (누르면 이름이 들어갑니다)</p><div class="chips" id="elderChips"></div>' : ''}`;
+}
+
+/* ---------- 상태 ↔ 화면 ---------- */
+function paint() {
+  FORM.forEach(f => {
+    const v = state[f.key];
+    if (f.type === 'single' || f.type === 'multi') {
+      const sel = f.type === 'multi' ? (v || []) : (v ? [v] : []);
+      document.querySelectorAll(`.chip[data-key="${f.key}"]`).forEach(b => b.setAttribute('aria-pressed', sel.includes(b.dataset.val)));
+    } else {
+      const el = $('f-' + f.key);
+      if (el && el.value !== (v || '')) el.value = v || '';
+    }
+    document.querySelector(`[data-sec="${f.key}"]`).hidden = !visible(f);
+  });
+  paintMe();
+  updateProgress();
+}
+
+function requiredFields() {
+  return [{ key: 'author', label: '내 이름' }].concat(FORM.filter(f => f.required && visible(f)));
+}
+function updateProgress() {
+  const req = requiredFields();
+  const done = req.filter(f => hasValue(state[f.key])).length;
+  const p = $('progress');
+  p.textContent = done === req.length ? '✓ 다 했어요' : `${done} / ${req.length}`;
+  p.classList.toggle('done', done === req.length);
+  ['author'].concat(FORM.map(f => f.key)).forEach(k => {
+    const t = $('tick-' + k);
+    if (t) t.textContent = hasValue(state[k]) ? '✓' : '';
+    const sec = document.querySelector(`[data-sec="${k}"]`);
+    if (sec && hasValue(state[k])) sec.classList.remove('missing');
+  });
+  if (!document.querySelector('section.card.missing:not([hidden])')) $('errBanner').classList.remove('show');
+}
+
+function onChip(e) {
+  const b = e.currentTarget, key = b.dataset.key, val = b.dataset.val;
+  const f = FORM.find(x => x.key === key);
+  if (f.type === 'single') state[key] = state[key] === val ? '' : val;
+  else {
+    const arr = (state[key] || []).slice();
+    state[key] = arr.includes(val) ? arr.filter(x => x !== val) : arr.concat(val);
+  }
+  paint(); saveDraft();
+}
+function onInput(e) {
+  state[e.target.dataset.key] = e.target.value;
+  updateProgress(); saveDraft();
+}
+function onPhrase(e) {
+  const { key, val } = e.currentTarget.dataset;
+  const cur = (state[key] || '').trim();
+  state[key] = cur ? cur + ' ' + val : val;
+  paint(); saveDraft();
+}
+
+/* ---------- 전에 만난 어르신 ---------- */
+function renderElderChips() {
+  const me = state.author || '';
+  const local = LS.get(KEY_ELDERS, []); // 이 휴대폰에서 보낸 기록
+  const all = serverElders.concat(local).filter(x => x.name && (!me || x.author === me));
+  const seen = {}, names = [];
+  for (let i = all.length - 1; i >= 0 && names.length < 8; i--) {
+    const n = all[i].name.trim();
+    if (!seen[n]) { seen[n] = 1; names.push(n); }
+  }
+  $('elderChips').innerHTML = names.map(n => `<button type="button" class="chip" data-elder="${esc(n)}">${esc(n)}</button>`).join('');
+  $('elderHint').hidden = !names.length;
+}
+function rememberElder(rec) {
+  const list = LS.get(KEY_ELDERS, []);
+  list.push({ name: rec.meta.elder, author: rec.author, date: rec.meta.date });
+  LS.set(KEY_ELDERS, list.slice(-50));
+  renderElderChips();
+}
+
+/* ---------- 자동 임시저장 ---------- */
+let draftTimer;
+function saveDraft() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    LS.set(KEY_DRAFT, state);
+    setFoot('휴대폰에 자동 저장됨 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }));
+  }, 300);
+}
+let version = '';
+function setFoot(text) { $('footState').textContent = text + (version ? ' · 버전 ' + version : ''); }
+
+function freshState() {
+  const me = LS.get(KEY_ME, {});
+  return { date: today(), author: me.name || '', team: me.team || '' };
+}
+
+/* ---------- 기록 만들기 ---------- */
+function buildRecord() {
+  return {
+    id: state._id || (state._id = uid()),
+    author: state.author || '',
+    team: state.team || '',
+    meta: { elder: (state.elder || '').trim(), date: state.date || '' },
+    items: FORM.map(f => ({
+      label: f.label,
+      value: !visible(f) ? '' : Array.isArray(state[f.key]) ? state[f.key].join(', ') : String(state[f.key] || '').trim()
+    }))
+  };
+}
+function summaryText(rec) {
+  const lines = [`활동가: ${rec.author} (${rec.team})`];
+  rec.items.forEach(i => { if (i.value) lines.push(`${i.label}: ${i.value}`); });
+  return lines.join('\n');
+}
+function validate(needAll) {
+  const req = needAll ? requiredFields() : requiredFields().filter(f => ['author', 'elder'].includes(f.key));
+  const missing = req.filter(f => !hasValue(state[f.key]));
+  document.querySelectorAll('section.card.missing').forEach(s => s.classList.remove('missing'));
+  if (!missing.length) return true;
+  missing.forEach(f => { const s = document.querySelector(`[data-sec="${f.key}"]`); if (s) s.classList.add('missing'); });
+  showError(`빨간 칸을 채워 주세요: ${missing.map(f => f.label).join(', ')}`);
+  const first = document.querySelector(`[data-sec="${missing[0].key}"]`);
+  if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return false;
+}
+
+/* ---------- 서버 ---------- */
+function callServer(fn, arg) {
+  return new Promise((resolve, reject) => {
+    if (!IS_GAS) {
+      setTimeout(() => resolve(fn === 'getInitData' ? { elders: [], version: '미리보기' } : { ok: true, docUrl: '', demo: true }), 300);
+      return;
+    }
+    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg);
+  });
+}
+
+/* ---------- 전송 ---------- */
+let sending = false;
+async function onConfirm() {
+  if (sending) return;
+  sending = true;
+  const rec = buildRecord();
+  $('confirmDlg').close();
+  removeSaved(rec.id);
+  const btn = $('sendBtn');
+  btn.disabled = true; btn.textContent = '보내는 중…';
+  try {
+    const res = await callServer('saveVisit', rec);
+    const link = res && res.docUrl ? ` <a href="${esc(res.docUrl)}" target="_blank" rel="noopener">기록지 보기</a>` : '';
+    flash('okBanner', `✅ ${esc(rec.meta.elder)} 어르신 기록을 보냈습니다.${res && res.demo ? ' (미리보기라 실제로 보내지지는 않음)' : ''}${link}`, 15000);
+    rememberElder(rec);
+  } catch (err) {
+    enqueue(rec);
+    showError('보내지 못했습니다(' + errText(err) + '). 휴대폰에 보관했으니 인터넷이 잡히면 "다시 보내기"를 눌러 주세요.');
+  } finally {
+    resetForm();
+    btn.disabled = false; btn.textContent = '전송';
+    sending = false;
+  }
+}
+function errText(err) { return err && err.message ? err.message : '인터넷 연결'; }
+
+function enqueue(rec) {
+  const q = LS.get(KEY_QUEUE, []);
+  if (!q.find(x => x.id === rec.id)) q.push(rec);
+  LS.set(KEY_QUEUE, q);
+  showQueue();
+}
+function showQueue() {
+  const q = LS.get(KEY_QUEUE, []);
+  $('queueText').textContent = `📦 아직 못 보낸 기록 ${q.length}건 (${q.map(r => r.meta.elder).join(', ')})`;
+  $('queueBanner').classList.toggle('show', q.length > 0);
+}
+let flushing = false;
+async function flushQueue() {
+  const q = LS.get(KEY_QUEUE, []);
+  if (!q.length || flushing) return;
+  flushing = true;
+  $('retryBtn').disabled = true;
+  let sent = 0;
+  for (const rec of q) {
+    try {
+      await callServer('saveVisit', rec); // 같은 기록ID는 서버에서 중복 저장하지 않음
+      sent++; rememberElder(rec);
+      LS.set(KEY_QUEUE, LS.get(KEY_QUEUE, []).filter(x => x.id !== rec.id));
+    } catch (e) { /* 다음에 다시 */ }
+  }
+  flushing = false;
+  $('retryBtn').disabled = false;
+  showQueue();
+  const left = LS.get(KEY_QUEUE, []).length;
+  if (sent) flash('okBanner', `✅ 못 보냈던 기록 ${sent}건을 보냈습니다.`);
+  if (left) showError(`${left}건은 아직 못 보냈습니다. 잠시 후 다시 눌러 주세요.`);
+}
+
+/* ---------- 저장 (휴대폰 + 시트 임시저장) ---------- */
+function saveCurrent(silent) {
+  if (!hasValue(state.elder) || !hasValue(state.author)) {
+    if (!silent) validate(false);
+    return false;
+  }
+  if (!state._id) state._id = uid();
+  const list = LS.get(KEY_SAVED, []).filter(x => x.id !== state._id);
+  list.push({ id: state._id, savedAt: Date.now(), state: JSON.parse(JSON.stringify(state)) });
+  LS.set(KEY_SAVED, list);
+  showSaved();
+  if (silent) return true;
+  const who = esc(state.elder);
+  if (!IS_GAS) { flash('okBanner', `💾 ${who} 어르신 기록을 이 휴대폰에 저장했습니다.`); return true; }
+  flash('okBanner', `💾 ${who} 어르신 기록을 휴대폰에 저장했습니다. 시트에 저장하는 중…`, 20000);
+  callServer('saveDraft', buildRecord())
+    .then(res => flash('okBanner', res && res.duplicate
+      ? `이 기록은 이미 보낸 기록입니다.`
+      : `💾 ${who} 어르신 기록을 저장했습니다. 다 쓰면 [전송]을 눌러 주세요.`))
+    .catch(err => showError(`휴대폰에는 저장했지만 시트 저장은 못 했습니다(${errText(err)}). 인터넷이 잡히면 [저장]을 다시 눌러 주세요.`));
+  return true;
+}
+function removeSaved(id) {
+  LS.set(KEY_SAVED, LS.get(KEY_SAVED, []).filter(x => x.id !== id));
+  showSaved();
+}
+function showSaved() {
+  const list = LS.get(KEY_SAVED, []);
+  $('savedText').textContent = `💾 저장만 하고 아직 안 보낸 기록 ${list.length}건`;
+  $('savedBanner').classList.toggle('show', list.length > 0);
+  $('savedList').innerHTML = list.slice().reverse().map(x => {
+    const t = new Date(x.savedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return `<div class="saved-item"><div class="who">${esc(x.state.elder || '')} 어르신
+      <small>방문 ${esc(x.state.date || '')} · 저장 ${esc(t)}</small></div>
+      <div class="acts"><button class="btn small primary" type="button" data-load="${esc(x.id)}">불러오기</button>
+      <button class="btn small" type="button" data-del="${esc(x.id)}">지우기</button></div></div>`;
+  }).join('');
+}
+function onSavedClick(e) {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.del) {
+    // 두 번 눌러야 지워짐 (실수 방지)
+    if (b.dataset.armed) { removeSaved(b.dataset.del); return; }
+    b.dataset.armed = '1'; b.textContent = '한 번 더 누르면 지워집니다'; b.classList.add('warn');
+    setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = '지우기'; b.classList.remove('warn'); } }, 4000);
+    return;
+  }
+  if (b.dataset.load) {
+    const item = LS.get(KEY_SAVED, []).find(x => x.id === b.dataset.load);
+    if (!item) return;
+    if (state._id !== item.id) saveCurrent(true);
+    state = item.state;
+    LS.set(KEY_DRAFT, state);
+    paint(); renderElderChips();
+    $('savedDlg').close();
+    window.scrollTo({ top: 0 });
+    flash('okBanner', `${esc(state.elder || '')} 어르신 기록을 불러왔습니다.`);
+  }
+}
+
+/* ---------- NEW ---------- */
+function onNew() {
+  if (hasValue(state.elder)) {
+    saveCurrent(true);
+    flash('okBanner', '쓰던 기록은 [저장한 기록 보기]에 보관했습니다. 새 기록을 시작합니다.');
+  }
+  resetForm();
+}
+function resetForm() {
+  state = freshState();
+  LS.del(KEY_DRAFT);
+  document.querySelectorAll('section.card.missing').forEach(s => s.classList.remove('missing'));
+  paint();
+  setFoot('저장: 휴대폰·시트에 임시저장 · 전송: 기록지 만들기');
+  window.scrollTo({ top: 0 });
+}
+
+function showError(msg) {
+  const b = $('errBanner'); b.textContent = msg; b.classList.add('show');
+  clearTimeout(b._t); b._t = setTimeout(() => b.classList.remove('show'), 12000);
+}
+function flash(id, html, ms) {
+  const b = $(id); b.innerHTML = html; b.classList.add('show');
+  clearTimeout(b._t); b._t = setTimeout(() => b.classList.remove('show'), ms || 7000);
+}
+
+/* ---------- 시작 ---------- */
+function init() {
+  render();
+  state = Object.assign(freshState(), LS.get(KEY_DRAFT, {}));
+  paint(); renderElderChips();
+  if (hasValue(state.elder)) flash('okBanner', '쓰던 기록을 불러왔습니다.');
+  if (!IS_GAS) $('demoBanner').classList.add('show');
+  showQueue(); showSaved();
+
+  $('teamChips').addEventListener('click', onTeamOrName);
+  $('nameChips').addEventListener('click', onTeamOrName);
+  $('changeMe').addEventListener('click', () => {
+    pickTeam = state.team || ''; state.author = ''; state.team = '';
+    LS.del(KEY_ME); paint(); renderElderChips(); saveDraft();
+  });
+  $('sendBtn').addEventListener('click', () => {
+    if (sending || !validate(true)) return;
+    $('summary').textContent = summaryText(buildRecord());
+    $('confirmDlg').showModal();
+  });
+  $('confirmBtn').addEventListener('click', onConfirm);
+  $('cancelBtn').addEventListener('click', () => $('confirmDlg').close());
+  $('newBtn').addEventListener('click', onNew);
+  $('saveBtn').addEventListener('click', () => saveCurrent(false));
+  $('savedOpenBtn').addEventListener('click', () => $('savedDlg').showModal());
+  $('savedCloseBtn').addEventListener('click', () => $('savedDlg').close());
+  $('savedList').addEventListener('click', onSavedClick);
+  $('retryBtn').addEventListener('click', flushQueue);
+  window.addEventListener('online', flushQueue);
+
+  callServer('getInitData').then(d => {
+    serverElders = d.elders || [];
+    version = d.version || '옛날 버전';
+    setFoot('저장: 휴대폰·시트에 임시저장 · 전송: 기록지 만들기');
+    renderElderChips();
+    flushQueue();
+  }).catch(err => showError('드라이브 연결을 확인해 주세요: ' + errText(err)));
+}
+init();
+</script>
+</body>
+</html>

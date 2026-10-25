@@ -62,7 +62,7 @@
 
 ## 그다음부터는 자동 반영
 
-휴대폰 화면(`Index.html`)은 앱이 열릴 때 **GitHub main 브랜치의 `end-of-life/Index.html`** 을 읽어 옵니다.
+휴대폰 화면(`Index.html`)은 앱이 열릴 때 **GitHub `claude/end-of-life-record` 브랜치의 `end-of-life/Index.html`** (main은 건드리지 않음) 을 읽어 옵니다.
 그래서 항목·명단·탭·디자인을 고치면 GitHub에 올라간 뒤 **5분 안에** 휴대폰에 반영되고, 다시 배포할 필요가 없습니다.
 (바로 확인하려면 웹 앱 주소 끝에 `?fresh=1`을 붙여 여세요.)
 화면 맨 아래 `화면 2026-10-25b · 서버 2026-10-25b`로 어느 버전인지 알 수 있습니다.

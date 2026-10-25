@@ -15,8 +15,8 @@
 
 const APP_TITLE = '생애말기 활동기록';
 const APP_VERSION = '2026-10-25b'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
-// 휴대폰 화면을 불러올 주소 (GitHub main 브랜치)
-const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/main/end-of-life/Index.html';
+// 휴대폰 화면을 불러올 주소 (GitHub의 이 앱 전용 브랜치 — main은 건드리지 않음)
+const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/claude/end-of-life-record/end-of-life/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
 // 기록지를 저장할 구글 드라이브 폴더 (「방문기록지」)
 // 폴더 주소 https://drive.google.com/drive/folders/ 뒤의 ID 부분입니다.

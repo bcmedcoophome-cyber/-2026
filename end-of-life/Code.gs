@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '생애말기 활동기록';
-const APP_VERSION = '2026-10-25b'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
+const APP_VERSION = '2026-10-25c'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub의 이 앱 전용 브랜치 — main은 건드리지 않음)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/claude/end-of-life-record/end-of-life/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -72,26 +72,12 @@ function setup() {
 }
 
 /**
- * 화면을 열 때: 어르신 이름 목록(모든 기록 종류, 아래 행일수록 최신)과 버전
- * elders = [{ name, author, date, kind }]
+ * 화면을 열 때: 버전만 돌려줌.
+ * 앱은 로그인 없이 누구나 열 수 있으므로, 시트의 어르신 이름 등 저장된 정보는 절대 돌려주지 않음.
+ * (전에 만난 어르신 목록은 각 휴대폰에 남은 기록으로만 보여 줌)
  */
 function getInitData() {
-  const { ss } = ensureStorage_();
-  const sh = getSheet_(ss, LIST_SHEET, LIST_HEADERS);
-  const elders = [];
-  const lastRow = sh.getLastRow();
-  if (lastRow > 1) {
-    const values = sh.getRange(1, 1, lastRow, sh.getLastColumn()).getDisplayValues();
-    const h = values[0];
-    const col = name => h.indexOf(name);
-    for (let r = 1; r < values.length; r++) {
-      const v = values[r];
-      if (!v[col('어르신 이름')]) continue;
-      elders.push({ name: v[col('어르신 이름')], author: v[col('활동가')], date: v[col('방문날짜')], kind: v[col('기록종류')] });
-    }
-  }
-  elders.sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  return { elders: elders, version: APP_VERSION };
+  return { elders: [], version: APP_VERSION };
 }
 
 /**
@@ -128,7 +114,7 @@ function upsertRecord_(record, final) {
     // 이미 전송 완료된 기록(다시 보내기 등)은 중복 문서를 만들지 않음
     const prev = findRow_(list, record.id);
     if (prev && prev.get(STATUS_HEADER) === STATUS_SENT) {
-      return { ok: true, duplicate: true, docUrl: prev.get(LINK_HEADER), status: STATUS_SENT };
+      return { ok: true, duplicate: true, status: STATUS_SENT };
     }
 
     const docUrl = final ? createDoc_(folder, record) : '';
@@ -156,7 +142,7 @@ function upsertRecord_(record, final) {
       '활동가': record.author || '', '팀': record.team || '', '상태': status,
       '알림': (record.alerts || []).filter(Boolean).join(' / '), '기록지': docUrl
     });
-    return { ok: true, docUrl: docUrl, status: status };
+    return { ok: true, status: status };
   } finally {
     lock.releaseLock();
   }

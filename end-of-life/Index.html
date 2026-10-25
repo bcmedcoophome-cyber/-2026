@@ -168,6 +168,8 @@ const TEAMS = [
  *  type: text | date | single(하나만) | multi(여러 개) | memo(긴 글)
  *  showIf: 다른 항목이 특정 값일 때만 보임
  * ===================================================================== */
+const KIND = { name: '방문기록지', filePrefix: '생애말기활동가기록지', docTitle: '생애말기활동가기록지' };
+const UI_VERSION = '2026-10-25b'; // 화면 버전 (GitHub에서 고치면 올림)
 const FORM = [
   { key: 'date', label: '방문날짜', type: 'date', required: true },
   { key: 'elder', label: '어르신 이름', type: 'text', required: true, placeholder: '어르신 성함' },
@@ -360,7 +362,7 @@ function saveDraft() {
   }, 300);
 }
 let version = '';
-function setFoot(text) { $('footState').textContent = text + (version ? ' · 버전 ' + version : ''); }
+function setFoot(text) { $('footState').textContent = text + ' · 화면 ' + UI_VERSION + (version ? ' · 서버 ' + version : ''); }
 
 function freshState() {
   const me = LS.get(KEY_ME, {});
@@ -369,20 +371,23 @@ function freshState() {
 
 /* ---------- 기록 만들기 ---------- */
 function buildRecord() {
+  const val = f => !visible(f) ? '' : Array.isArray(state[f.key]) ? state[f.key].join(', ') : String(state[f.key] || '').trim();
+  const medical = state.medical === '있음';
   return {
     id: state._id || (state._id = uid()),
+    kind: KIND.name, filePrefix: KIND.filePrefix, docTitle: KIND.docTitle,
     author: state.author || '',
     team: state.team || '',
     meta: { elder: (state.elder || '').trim(), date: state.date || '' },
-    items: FORM.map(f => ({
-      label: f.label,
-      value: !visible(f) ? '' : Array.isArray(state[f.key]) ? state[f.key].join(', ') : String(state[f.key] || '').trim()
-    }))
+    alerts: medical ? ['의료진 전달사항 있음: ' + (String(state.medicalNote || '').trim() || '(내용 없음)')] : [],
+    sections: [{ title: '활동 내용', items: FORM.map(f => ({
+      label: f.label, value: val(f), alert: medical && (f.key === 'medical' || f.key === 'medicalNote')
+    })) }]
   };
 }
 function summaryText(rec) {
   const lines = [`활동가: ${rec.author} (${rec.team})`];
-  rec.items.forEach(i => { if (i.value) lines.push(`${i.label}: ${i.value}`); });
+  rec.sections.forEach(s => s.items.forEach(i => { if (i.value) lines.push(`${i.label}: ${i.value}`); }));
   return lines.join('\n');
 }
 function validate(needAll) {

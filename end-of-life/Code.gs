@@ -1,78 +1,108 @@
 /**
  * 생애말기활동가기록지 — Google Apps Script 서버 코드
  *
+ * ▶ 휴대폰 화면(Index.html)은 GitHub에서 자동으로 불러옵니다.
+ *   그래서 화면·항목·명단을 고칠 때는 이 프로젝트를 다시 배포할 필요가 없습니다.
+ *   (GitHub를 못 읽을 때만 이 프로젝트 안의 Index 파일을 대신 씁니다)
+ *
  * 활동가가 휴대폰에서 고른 내용을 받아
- *   1) [저장] 시 구글 시트(활동기록)에 '임시저장'으로 기록하고
- *   2) [전송] 시 같은 줄을 '전송완료'로 바꾸고, 방문 건마다 구글 문서
- *      「생애말기활동가기록지_어르신_활동가_날짜」를 지정 폴더 안의
- *      활동가별/월별 폴더(예: 이명옥/2026-10)에 만듭니다.
+ *   1) [저장] 시 구글 시트에 '임시저장'으로 기록 (기록 종류별 탭: 방문기록지, 첫방문 …)
+ *   2) [전송] 시 같은 줄을 '전송완료'로 바꾸고, 구글 문서 기록지를
+ *      지정 폴더 안의 활동가별/월별 폴더(예: 이명옥/2026-10)에 만듭니다.
  *
  * 설치 방법은 같은 폴더의 README.md를 보세요.
  */
 
 const APP_TITLE = '생애말기 활동기록';
-const APP_VERSION = '2026-10-25'; // 휴대폰 화면 아래에 표시됨: 이 날짜가 보이면 최신 코드
+const APP_VERSION = '2026-10-25b'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
+// 휴대폰 화면을 불러올 주소 (GitHub main 브랜치)
+const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/main/end-of-life/Index.html';
+const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
 // 기록지를 저장할 구글 드라이브 폴더 (「방문기록지」)
 // 폴더 주소 https://drive.google.com/drive/folders/ 뒤의 ID 부분입니다.
 const TARGET_FOLDER_ID = '10TnjGjVX9ErWWt-uffupolUOcb7M_02_';
 const FOLDER_NAME = '생애말기활동가기록지'; // TARGET_FOLDER_ID를 비워두면 이 이름으로 새 폴더를 만듦
 const SHEET_FILE_NAME = '생애말기활동가 기록부';
-const SHEET_NAME = '활동기록';
+const DEFAULT_KIND = '방문기록지'; // 기록 종류 = 시트 탭 이름 (항목 전체)
+const LIST_SHEET = '전체목록';     // 맨 앞 탭: 모든 기록을 한 줄씩 (기록지 링크 포함)
+const LIST_HEADERS = ['기록ID', '전송시각', '기록종류', '방문날짜', '어르신 이름', '활동가', '팀', '상태', '알림', '기록지'];
 const BASE_HEADERS = ['기록ID', '전송시각', '활동가', '팀', '구글계정', '상태'];
 const STATUS_HEADER = '상태';
 const STATUS_DRAFT = '임시저장';
 const STATUS_SENT = '전송완료';
 const LINK_HEADER = '기록지';
-const DOC_TITLE = '생애말기활동가기록지';
-const FILE_PREFIX = '생애말기활동가기록지';
+const DEFAULT_PREFIX = '생애말기활동가기록지';
 const PROP_SHEET = 'EOL_SHEET_ID';
 const PROP_FOLDER = 'EOL_FOLDER_ID';
 
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+function doGet(e) {
+  const fresh = e && e.parameter && e.parameter.fresh;
+  return HtmlService.createHtmlOutput(loadHtml_(!!fresh))
     .setTitle(APP_TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
 }
 
-/** 처음 한 번 편집기에서 실행: 권한 승인 + 드라이브 폴더/시트 생성 */
+/** GitHub의 최신 화면을 읽음 (5분 저장). 실패하면 프로젝트 안의 Index 파일 */
+function loadHtml_(fresh) {
+  const cache = CacheService.getScriptCache();
+  if (!fresh) {
+    const hit = cache.get('html');
+    if (hit) return hit;
+  }
+  try {
+    const res = UrlFetchApp.fetch(HTML_URL, { muteHttpExceptions: true, followRedirects: true });
+    const html = res.getResponseCode() === 200 ? res.getContentText('UTF-8') : '';
+    if (html.indexOf('</html>') > 0 && html.indexOf('google.script.run') > 0) {
+      try { cache.put('html', html, HTML_CACHE_SECONDS); } catch (err) {} // 100KB 넘으면 저장만 생략
+      return html;
+    }
+  } catch (err) { /* 아래 예비 화면 사용 */ }
+  return HtmlService.createHtmlOutputFromFile('Index').getContent();
+}
+
+/** 처음 한 번 편집기에서 실행: 권한 승인 + 드라이브 폴더/시트 생성 + 화면 불러오기 확인 */
 function setup() {
   const { folder, ss } = ensureStorage_();
-  getSheet_(ss);
+  getSheet_(ss, LIST_SHEET, LIST_HEADERS);
+  getSheet_(ss, DEFAULT_KIND);
   Logger.log('저장 폴더: ' + folder.getUrl());
   Logger.log('기록 시트: ' + ss.getUrl());
+  const code = UrlFetchApp.fetch(HTML_URL, { muteHttpExceptions: true }).getResponseCode();
+  Logger.log(code === 200 ? '화면: GitHub에서 불러옴' : '화면: GitHub 읽기 실패(' + code + ') → 프로젝트 안 Index 파일 사용');
 }
 
 /**
- * 화면을 열 때: 어르신 이름 목록(활동가별 최근 방문순)과 버전을 돌려줌
- * elders = [{ name, author, date }]  (아래 행일수록 최신)
+ * 화면을 열 때: 어르신 이름 목록(모든 기록 종류, 아래 행일수록 최신)과 버전
+ * elders = [{ name, author, date, kind }]
  */
 function getInitData() {
   const { ss } = ensureStorage_();
-  const sh = getSheet_(ss);
+  const sh = getSheet_(ss, LIST_SHEET, LIST_HEADERS);
   const elders = [];
   const lastRow = sh.getLastRow();
   if (lastRow > 1) {
     const values = sh.getRange(1, 1, lastRow, sh.getLastColumn()).getDisplayValues();
-    const header = values[0];
-    const nameCol = header.indexOf('어르신 이름');
-    const authorCol = header.indexOf('활동가');
-    const dateCol = header.indexOf('방문날짜');
+    const h = values[0];
+    const col = name => h.indexOf(name);
     for (let r = 1; r < values.length; r++) {
-      const name = nameCol >= 0 ? values[r][nameCol] : '';
-      if (!name) continue;
-      elders.push({
-        name: name,
-        author: authorCol >= 0 ? values[r][authorCol] : '',
-        date: dateCol >= 0 ? values[r][dateCol] : ''
-      });
+      const v = values[r];
+      if (!v[col('어르신 이름')]) continue;
+      elders.push({ name: v[col('어르신 이름')], author: v[col('활동가')], date: v[col('방문날짜')], kind: v[col('기록종류')] });
     }
   }
+  elders.sort((a, b) => String(a.date).localeCompare(String(b.date)));
   return { elders: elders, version: APP_VERSION };
 }
 
 /**
  * [저장] 버튼: 시트에 '임시저장'으로 기록 (같은 기록ID는 같은 줄을 덮어씀, 문서는 만들지 않음)
- * record = { id, author, team, meta:{ elder, date }, items:[{ label, value }] }
+ * record = {
+ *   id, kind:'방문기록지'|'첫방문'|…, filePrefix, docTitle, author, team,
+ *   meta:{ elder, date },
+ *   sections:[{ title, items:[{ label, value }] }],   // 문서에 섹션별 표로 들어감
+ *   items:[{ label, value }],                          // (sections 대신 써도 됨)
+ *   alerts:['의료진 전달사항 있음: …']                  // 문서 위쪽에 빨간 글씨
+ * }
  */
 function saveDraft(record) {
   return upsertRecord_(record, false);
@@ -91,51 +121,82 @@ function upsertRecord_(record, final) {
   lock.waitLock(30000);
   try {
     const { folder, ss } = ensureStorage_();
-    const sh = getSheet_(ss);
+    const kind = kindOf_(record);
+    const sh = getSheet_(ss, kind);
+    const list = getSheet_(ss, LIST_SHEET, LIST_HEADERS);
 
-    // 이미 있는 기록(저장했던 기록, 또는 다시 보내기)은 같은 줄을 찾아 갱신
-    let rowNo = 0;
-    if (sh.getLastRow() > 1) {
-      const found = sh.getRange(2, 1, sh.getLastRow() - 1, 1)
-        .createTextFinder(String(record.id)).matchEntireCell(true).findNext();
-      if (found) rowNo = found.getRow();
-    }
-    if (rowNo) {
-      const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-      const cell = name => header.indexOf(name) >= 0 ? sh.getRange(rowNo, header.indexOf(name) + 1).getDisplayValue() : '';
-      if (cell(STATUS_HEADER) === STATUS_SENT) {
-        // 이미 전송 완료된 기록: 중복 문서를 만들지 않음
-        return { ok: true, duplicate: true, docUrl: cell(LINK_HEADER), status: STATUS_SENT };
-      }
+    // 이미 전송 완료된 기록(다시 보내기 등)은 중복 문서를 만들지 않음
+    const prev = findRow_(list, record.id);
+    if (prev && prev.get(STATUS_HEADER) === STATUS_SENT) {
+      return { ok: true, duplicate: true, docUrl: prev.get(LINK_HEADER), status: STATUS_SENT };
     }
 
     const docUrl = final ? createDoc_(folder, record) : '';
     const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    const status = final ? STATUS_SENT : STATUS_DRAFT;
 
+    // 1) 기록 종류별 탭: 항목 전체
     const data = {};
     data['기록ID'] = record.id;
     data['전송시각'] = now;
     data['활동가'] = record.author || '';
     data['팀'] = record.team || '';
     data['구글계정'] = Session.getActiveUser().getEmail() || '';
-    data[STATUS_HEADER] = final ? STATUS_SENT : STATUS_DRAFT;
-    (record.items || []).forEach(it => { if (it && it.label) data[it.label] = it.value || ''; });
+    data[STATUS_HEADER] = status;
+    allItems_(record).forEach(it => { data[it.label] = it.value || ''; });
     data['방문날짜'] = record.meta.date; // 문서 이름·폴더와 항상 같게
     data['어르신 이름'] = record.meta.elder;
     data[LINK_HEADER] = docUrl;
+    writeRow_(sh, data);
 
-    const header = ensureHeaders_(sh, Object.keys(data));
-    const row = header.map(h => safeCell_(data[h]));
-    const target = sh.getRange(rowNo || sh.getLastRow() + 1, 1, 1, row.length);
-    target.setNumberFormat('@');
-    target.setValues([row]);
-    return { ok: true, docUrl: docUrl, status: data[STATUS_HEADER] };
+    // 2) 전체목록 탭: 한 건 한 줄
+    writeRow_(list, {
+      '기록ID': record.id, '전송시각': now, '기록종류': kind,
+      '방문날짜': record.meta.date, '어르신 이름': record.meta.elder,
+      '활동가': record.author || '', '팀': record.team || '', '상태': status,
+      '알림': (record.alerts || []).filter(Boolean).join(' / '), '기록지': docUrl
+    });
+    return { ok: true, docUrl: docUrl, status: status };
   } finally {
     lock.releaseLock();
   }
 }
 
 /* ---------------- 내부 함수 ---------------- */
+
+/** 기록ID로 줄 찾기 → { row, get(열이름) } 또는 null */
+function findRow_(sh, id) {
+  if (sh.getLastRow() < 2) return null;
+  const found = sh.getRange(2, 1, sh.getLastRow() - 1, 1)
+    .createTextFinder(String(id)).matchEntireCell(true).findNext();
+  if (!found) return null;
+  const row = found.getRow();
+  const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  return { row: row, get: name => header.indexOf(name) >= 0 ? sh.getRange(row, header.indexOf(name) + 1).getDisplayValue() : '' };
+}
+
+/** 같은 기록ID 줄이 있으면 덮어쓰고, 없으면 맨 아래에 추가 (없는 열은 자동 추가) */
+function writeRow_(sh, data) {
+  const prev = findRow_(sh, data['기록ID']);
+  const header = ensureHeaders_(sh, Object.keys(data));
+  const row = header.map(h => safeCell_(data[h]));
+  const target = sh.getRange(prev ? prev.row : sh.getLastRow() + 1, 1, 1, row.length);
+  target.setNumberFormat('@');
+  target.setValues([row]);
+}
+
+function kindOf_(record) {
+  const k = clean_(record.kind).slice(0, 40) || DEFAULT_KIND;
+  return k === LIST_SHEET ? DEFAULT_KIND : k;
+}
+
+/** 섹션·항목을 한 줄로 펼침 (label 없는 것은 버림) */
+function allItems_(record) {
+  const out = [];
+  (record.sections || []).forEach(s => (s && s.items || []).forEach(it => { if (it && it.label) out.push(it); }));
+  (record.items || []).forEach(it => { if (it && it.label) out.push(it); });
+  return out;
+}
 
 function ensureStorage_() {
   const props = PropertiesService.getScriptProperties();
@@ -157,18 +218,19 @@ function ensureStorage_() {
   } else {
     ss = SpreadsheetApp.create(SHEET_FILE_NAME);
     DriveApp.getFileById(ss.getId()).moveTo(folder);
-    ss.getSheets()[0].setName(SHEET_NAME);
+    ss.getSheets()[0].setName(LIST_SHEET);
     props.setProperty(PROP_SHEET, ss.getId());
   }
   return { folder: folder, ss: ss };
 }
 
-function getSheet_(ss) {
-  let sh = ss.getSheetByName(SHEET_NAME);
-  if (!sh) sh = ss.insertSheet(SHEET_NAME);
+function getSheet_(ss, name, headers) {
+  headers = headers || BASE_HEADERS;
+  let sh = ss.getSheetByName(name);
+  if (!sh) sh = ss.insertSheet(name);
   if (sh.getLastRow() === 0) {
-    const head = sh.getRange(1, 1, 1, BASE_HEADERS.length);
-    head.setValues([BASE_HEADERS]);
+    const head = sh.getRange(1, 1, 1, headers.length);
+    head.setValues([headers]);
     head.setFontWeight('bold');
     head.setBackground('#e8f0fe');
     sh.setFrozenRows(1);
@@ -215,10 +277,9 @@ function getSubFolder_(parent, name) {
  */
 function createDoc_(folder, record) {
   const m = record.meta;
-  const v = {};
-  (record.items || []).forEach(it => { if (it && it.label) v[it.label] = it.value || ''; });
   const author = clean_(record.author) || '작성자미상';
-  const name = [FILE_PREFIX, clean_(m.elder), author, m.date].join('_');
+  const prefix = clean_(record.filePrefix) || DEFAULT_PREFIX;
+  const name = [prefix, clean_(m.elder), author, m.date].join('_');
 
   const doc = DocumentApp.create(name);
   try {
@@ -230,46 +291,46 @@ function createDoc_(folder, record) {
 
     // 주의: Paragraph.setText()는 아무것도 돌려주지 않으므로 이어 쓰지(체이닝) 않음
     const title = body.getParagraphs()[0];
-    title.setText(DOC_TITLE);
+    title.setText(String(record.docTitle || prefix));
     title.setHeading(DocumentApp.ParagraphHeading.TITLE);
     title.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
 
     const head = body.appendTable([
-      ['방문날짜', m.date, '어르신', m.elder],
-      ['활동가', record.author || '', '팀', record.team || '']
+      ['방문날짜', String(m.date), '어르신', String(m.elder)],
+      ['활동가', String(record.author || ''), '팀', String(record.team || '')]
     ]);
     head.setBorderColor('#9aa0a6');
     for (let r = 0; r < head.getNumRows(); r++) {
       [0, 2].forEach(c => styleLabelCell_(head.getRow(r).getCell(c)));
     }
 
-    const medical = v['의료진 전달사항'] === '있음';
-    if (medical) {
-      body.appendParagraph('');
-      const warn = body.appendParagraph('⚠ 의료진 전달사항 있음: ' + (v['전달 내용'] || '(내용 없음)'));
+    (record.alerts || []).filter(Boolean).forEach(a => {
+      const warn = body.appendParagraph('⚠ ' + a);
       warn.editAsText().setBold(true);
       warn.editAsText().setForegroundColor('#c5221f');
-    }
+    });
 
     const skip = ['방문날짜', '어르신 이름'];
-    const rows = (record.items || [])
-      .filter(it => it && it.label && skip.indexOf(it.label) < 0)
-      .map(it => [it.label, String(it.value || '-')]);
-    if (rows.length) {
-      const h = body.appendParagraph('■ 활동 내용');
+    const sections = (record.sections && record.sections.length)
+      ? record.sections
+      : [{ title: '활동 내용', items: record.items || [] }];
+    sections.forEach(sec => {
+      const items = (sec && sec.items || []).filter(it => it && it.label && skip.indexOf(it.label) < 0);
+      if (!items.length) return;
+      const h = body.appendParagraph('■ ' + (sec.title || ''));
       h.setHeading(DocumentApp.ParagraphHeading.HEADING3);
-      const table = body.appendTable(rows);
+      const table = body.appendTable(items.map(it => [String(it.label), String(it.value || '-')]));
       table.setBorderColor('#9aa0a6');
       for (let i = 0; i < table.getNumRows(); i++) {
         const cell = table.getRow(i).getCell(0);
         cell.setWidth(120);
         styleLabelCell_(cell);
-        if (medical && rows[i][0] === '의료진 전달사항') {
+        if (items[i].alert) {
           table.getRow(i).getCell(1).editAsText().setForegroundColor('#c5221f');
           table.getRow(i).getCell(1).editAsText().setBold(true);
         }
       }
-    }
+    });
 
     const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
     body.appendParagraph('');

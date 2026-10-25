@@ -93,6 +93,13 @@
   .saved-item .acts .btn { flex: 1; }
   #savedList { max-height: 60vh; overflow: auto; }
   #savedList:empty::before { content: "저장된 기록이 없습니다."; display: block; padding: 16px; color: var(--muted); }
+  .time-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .time-row span { width: 44px; font-weight: 700; flex: none; }
+  .time-row input { flex: 1; min-width: 0; }
+  input[type=time] { font: inherit; font-size: 22px; color: var(--ink); background: var(--bg);
+    border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; min-height: 60px; }
+  .time-calc { margin: 4px 0 0; font-size: 20px; font-weight: 700; color: var(--ok); }
+  .time-calc.bad { color: var(--danger); }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -170,9 +177,10 @@ const TEAMS = ['따품안', '임종하면', '해바라기', '햇살동행'];
  *  showIf: 다른 항목이 특정 값일 때만 보임
  * ===================================================================== */
 const KIND = { name: '방문기록지', filePrefix: '생애말기활동가기록지', docTitle: '생애말기활동가기록지' };
-const UI_VERSION = '2026-10-25d'; // 화면 버전 (GitHub에서 고치면 올림)
+const UI_VERSION = '2026-10-25e'; // 화면 버전 (GitHub에서 고치면 올림)
 const FORM = [
   { key: 'date', label: '방문날짜', type: 'date', required: true },
+  { key: 'time', label: '활동 시간', type: 'timerange', required: true, hint: '시작한 시간과 끝난 시간을 넣어 주세요' },
   { key: 'elder', label: '어르신 이름', type: 'text', required: true, placeholder: '어르신 성함' },
   { key: 'partner', label: '대화상대', type: 'multi', required: true, hint: '여러 개 눌러도 됩니다',
     options: ['대상자 본인', '자녀', '요양보호사', '배우자', '기타'] },
@@ -262,6 +270,12 @@ function render() {
     state.elder = b.dataset.elder; paint(); saveDraft();
   });
   $('todayBtn').addEventListener('click', () => { state.date = today(); paint(); saveDraft(); });
+  form.querySelectorAll('input[type=time]').forEach(el => el.addEventListener('change', onInput));
+  form.querySelectorAll('[data-now]').forEach(b => b.addEventListener('click', () => {
+    const d = new Date();
+    state[b.dataset.now] = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    calcTime(); paint(); saveDraft();
+  }));
 }
 
 function renderField(f) {
@@ -275,6 +289,12 @@ function renderField(f) {
       <div class="voice">🎤 키보드의 마이크를 누르면 말로 입력할 수 있어요</div>
       ${f.phrases ? `<div class="phrases">${f.phrases.map(p => `<button type="button" class="phrase" data-key="${f.key}" data-val="${esc(p)}">+ ${esc(p)}</button>`).join('')}</div>` : ''}`;
   }
+  if (f.type === 'timerange') {
+    const row = (k, name) => `<div class="time-row"><span>${name}</span>
+      <input id="f-${k}" type="time" data-key="${k}" aria-label="${f.label} ${name}">
+      <button type="button" class="btn small" data-now="${k}">지금</button></div>`;
+    return row('timeStart', '시작') + row('timeEnd', '끝') + `<p class="time-calc" id="timeCalc"></p>`;
+  }
   if (f.type === 'date') {
     return `<div style="display:flex;gap:10px"><input id="${id}" type="date" data-key="${f.key}" aria-label="${esc(f.label)}" style="flex:1">
       <button type="button" class="btn small" id="todayBtn">오늘</button></div>`;
@@ -287,7 +307,10 @@ function renderField(f) {
 function paint() {
   FORM.forEach(f => {
     const v = state[f.key];
-    if (f.type === 'single' || f.type === 'multi') {
+    if (f.type === 'timerange') {
+      ['timeStart', 'timeEnd'].forEach(k => { const el = $('f-' + k); if (el.value !== (state[k] || '')) el.value = state[k] || ''; });
+      paintTimeCalc();
+    } else if (f.type === 'single' || f.type === 'multi') {
       const sel = f.type === 'multi' ? (v || []) : (v ? [v] : []);
       document.querySelectorAll(`.chip[data-key="${f.key}"]`).forEach(b => b.setAttribute('aria-pressed', sel.includes(b.dataset.val)));
     } else {
@@ -332,8 +355,29 @@ function onChip(e) {
   paint(); saveDraft();
 }
 function onInput(e) {
-  state[e.target.dataset.key] = e.target.value;
+  const key = e.target.dataset.key;
+  state[key] = e.target.value;
+  if (key === 'timeStart' || key === 'timeEnd') { calcTime(); paintTimeCalc(); }
   updateProgress(); saveDraft();
+}
+
+/* ---------- 활동 시간 ---------- */
+function toMin(t) { const m = /^(\d\d):(\d\d)/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; }
+function minutes() {
+  const a = toMin(state.timeStart), b = toMin(state.timeEnd);
+  return a === null || b === null ? null : b - a;
+}
+function durText(m) { const h = Math.floor(m / 60), r = m % 60; return (h ? h + '시간' : '') + (h && r ? ' ' : '') + (r || !h ? r + '분' : ''); }
+// 둘 다 바르게 들어가면 state.time = '14:00~16:30' (필수 확인용)
+function calcTime() {
+  const m = minutes();
+  state.time = m !== null && m > 0 ? state.timeStart + '~' + state.timeEnd : '';
+}
+function paintTimeCalc() {
+  const m = minutes(), el = $('timeCalc');
+  if (m === null) { el.textContent = ''; el.className = 'time-calc'; return; }
+  if (m <= 0) { el.textContent = '⚠ 끝난 시간이 시작 시간보다 늦어야 합니다'; el.className = 'time-calc bad'; return; }
+  el.textContent = '총 ' + durText(m) + ' 활동'; el.className = 'time-calc';
 }
 function onPhrase(e) {
   const { key, val } = e.currentTarget.dataset;
@@ -390,9 +434,13 @@ function buildRecord() {
     team: state.team || '',
     meta: { elder: (state.elder || '').trim(), date: state.date || '' },
     alerts: to.length ? ['필수 전달사항(' + to.join(', ') + '): ' + (String(state.noticeNote || '').trim() || '(내용 없음)')] : [],
-    sections: [{ title: '활동 내용', items: FORM.map(f => ({
+    sections: [{ title: '활동 내용', items: FORM.flatMap(f => f.type === 'timerange' ? [
+      { label: '시작 시간', value: state.timeStart || '' },
+      { label: '끝 시간', value: state.timeEnd || '' },
+      { label: '활동 시간', value: minutes() > 0 ? durText(minutes()) : '' }
+    ] : [{
       label: f.label, value: val(f), alert: to.length > 0 && (f.key === 'notice' || f.key === 'noticeNote')
-    })) }]
+    }]) }]
   };
 }
 function summaryText(rec) {

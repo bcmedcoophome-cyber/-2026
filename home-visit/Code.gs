@@ -10,7 +10,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-10-18'; // 휴대폰 화면 아래에 표시됨: 이 날짜가 보이면 최신 코드
+const APP_VERSION = '2026-10-26'; // 휴대폰 화면 아래에 표시됨: 이 날짜가 보이면 최신 코드
 // 방문기록지를 저장할 구글 드라이브 폴더 (「환자별 방문기록지 (사회복지)」)
 // 폴더 주소 https://drive.google.com/drive/folders/ 뒤의 ID 부분입니다.
 const TARGET_FOLDER_ID = '1LA6KMNOLoPhVf8H1qza6v6voN-U-PfeG';
@@ -129,6 +129,143 @@ function upsertVisit_(record, final) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* =====================================================================
+ *  환자카드 — 방문기록 시트를 환자(이름+생년월일)별로 묶어 날짜순으로 보여 줌
+ *  방문예정 — 방문해야 할 분 목록. 같은 기록부의 '방문예정' 탭에 한 줄씩
+ * ===================================================================== */
+const CARD_INFO = ['장기요양등급', '장기요양기관명', '장애정도', '장애유형', '동거형태', '주돌봄자', '소득구분'];
+const TODO_SHEET = '방문예정';
+const TODO_HEADERS = ['기록ID', '등록시각', '작성자', '이름', '생년월일', '예정일', '내용', '상태', '완료시각', '구글계정'];
+const TODO_OPEN = '예정';
+const TODO_DONE = '완료';
+
+/** [환자카드] 탭: 환자별 방문 기록 (최근 방문이 위) */
+function getPatientCards() {
+  const { ss } = ensureStorage_();
+  const sh = getSheet_(ss);
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return { cards: [] };
+  const values = sh.getRange(1, 1, lastRow, sh.getLastColumn()).getDisplayValues();
+  const header = values[0];
+  const at = (row, name) => header.indexOf(name) >= 0 ? String(row[header.indexOf(name)] || '').trim() : '';
+
+  // 생년월일이 빠진 줄은, 같은 이름의 생년월일이 하나뿐이면 그 분으로 묶음
+  const births = {};
+  for (let r = 1; r < values.length; r++) {
+    const name = at(values[r], '환자명'), birth = at(values[r], '생년월일');
+    if (!name) continue;
+    births[name] = births[name] || [];
+    if (birth && births[name].indexOf(birth) < 0) births[name].push(birth);
+  }
+
+  const cards = {};
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    const name = at(row, '환자명');
+    if (!name) continue;
+    let birth = at(row, '생년월일');
+    if (!birth && births[name].length === 1) birth = births[name][0];
+    const key = name + '|' + birth;
+    const card = cards[key] || (cards[key] = { key: key, name: name, birth: birth, info: {}, visits: [] });
+    CARD_INFO.forEach(h => { const v = at(row, h); if (v) card.info[h] = v; }); // 아래 줄일수록 최신
+    card.visits.push({
+      row: r, date: at(row, '방문일'), type: at(row, '방문유형'), author: at(row, '작성자'),
+      status: at(row, STATUS_HEADER), crisis: at(row, '위기신호'), needs: at(row, '확인된 욕구'),
+      memo: at(row, '상담내용'), plan: at(row, '향후 계획'), doc: at(row, LINK_HEADER)
+    });
+  }
+  const list = Object.keys(cards).map(k => cards[k]);
+  list.forEach(c => c.visits.sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.row - a.row));
+  list.sort((a, b) => ((b.visits[0] || {}).date || '').localeCompare((a.visits[0] || {}).date || ''));
+  return { cards: list };
+}
+
+/** [방문예정] 탭: 전체 목록 */
+function getTodos() {
+  const { ss } = ensureStorage_();
+  const sh = getTodoSheet_(ss);
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return { todos: [] };
+  const values = sh.getRange(1, 1, lastRow, sh.getLastColumn()).getDisplayValues();
+  const header = values[0];
+  const todos = values.slice(1).filter(row => row[0]).map(row => {
+    const at = name => header.indexOf(name) >= 0 ? String(row[header.indexOf(name)] || '') : '';
+    return {
+      id: at('기록ID'), created: at('등록시각'), author: at('작성자'), name: at('이름'), birth: at('생년월일'),
+      due: at('예정일'), note: at('내용'), done: at('상태') === TODO_DONE, doneAt: at('완료시각')
+    };
+  });
+  return { todos: todos };
+}
+
+/** 방문예정 추가·수정·완료 (같은 기록ID는 같은 줄을 덮어씀) */
+function saveTodo(t) {
+  if (!t || !t.id || !String(t.name || '').trim()) throw new Error('방문할 분 이름을 입력해 주세요.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const { ss } = ensureStorage_();
+    const sh = getTodoSheet_(ss);
+    const header = ensureHeaders_(sh, TODO_HEADERS);
+    const rowNo = findRowById_(sh, t.id);
+    const prev = rowNo ? sh.getRange(rowNo, 1, 1, header.length).getDisplayValues()[0] : [];
+    const old = name => header.indexOf(name) >= 0 ? (prev[header.indexOf(name)] || '') : '';
+    const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    const data = {
+      '기록ID': t.id,
+      '등록시각': old('등록시각') || now,
+      '작성자': t.author || '',
+      '이름': String(t.name).trim(),
+      '생년월일': t.birth || '',
+      '예정일': t.due || '',
+      '내용': t.note || '',
+      '상태': t.done ? TODO_DONE : TODO_OPEN,
+      '완료시각': t.done ? (old('완료시각') || now) : '',
+      '구글계정': Session.getActiveUser().getEmail() || old('구글계정')
+    };
+    const row = header.map(h => safeCell_(data[h]));
+    sh.getRange(rowNo || sh.getLastRow() + 1, 1, 1, row.length).setNumberFormat('@').setValues([row]);
+    return { ok: true, todo: { id: t.id, created: data['등록시각'], author: data['작성자'], name: data['이름'], birth: data['생년월일'],
+      due: data['예정일'], note: data['내용'], done: !!t.done, doneAt: data['완료시각'] } };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 방문예정 삭제 */
+function deleteTodo(id) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const { ss } = ensureStorage_();
+    const sh = getTodoSheet_(ss);
+    const rowNo = findRowById_(sh, id);
+    if (rowNo) sh.deleteRow(rowNo);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getTodoSheet_(ss) {
+  let sh = ss.getSheetByName(TODO_SHEET);
+  if (!sh) sh = ss.insertSheet(TODO_SHEET);
+  if (sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, TODO_HEADERS.length).setValues([TODO_HEADERS]);
+    sh.setFrozenRows(1);
+    sh.getRange('1:1').setFontWeight('bold').setBackground('#e8f0fe');
+  }
+  return sh;
+}
+
+/** 첫 열(기록ID)에서 같은 ID의 줄 번호 (없으면 0) */
+function findRowById_(sh, id) {
+  if (!id || sh.getLastRow() < 2) return 0;
+  const found = sh.getRange(2, 1, sh.getLastRow() - 1, 1)
+    .createTextFinder(String(id)).matchEntireCell(true).findNext();
+  return found ? found.getRow() : 0;
 }
 
 /* ---------------- 내부 함수 ---------------- */

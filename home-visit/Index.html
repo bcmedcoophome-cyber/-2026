@@ -109,9 +109,9 @@
   .idcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
   .idcard .nm { font-size: 22px; font-weight: 800; }
   .idcard .birth { font-size: 15px; color: var(--muted); margin-top: 2px; }
-  .info { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14px; margin: 12px 0 0; }
-  .info dt { color: var(--muted); }
-  .info dd { margin: 0; }
+  .pinfo { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14px; margin: 12px 0 0; }
+  .pinfo dt { color: var(--muted); }
+  .pinfo dd { margin: 0; }
   .idcard .row { margin-top: 12px; }
   .idcard .row .btn { padding: 12px 6px; font-size: 15px; white-space: nowrap; }
   .back { margin-bottom: 10px; }
@@ -327,7 +327,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-10-27'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-10-27b'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -1267,7 +1267,7 @@ function renderCardDetail(c) {
     <div class="idcard">
       <div class="nm">${esc(c.name)}</div>
       <div class="birth">${esc(birthText(c.birth))}</div>
-      ${info.length ? `<dl class="info">${info.map(k => `<dt>${esc(k)}</dt><dd>${esc(c.info[k])}</dd>`).join('')}</dl>` : ''}
+      ${info.length ? `<dl class="pinfo">${info.map(k => `<dt>${esc(k)}</dt><dd>${esc(c.info[k])}</dd>`).join('')}</dl>` : ''}
       <div class="row">
         <button type="button" class="btn primary" data-act="write">📝 방문기록 쓰기</button>
         <button type="button" class="btn" data-act="plan">📅 방문예정 추가</button>

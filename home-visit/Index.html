@@ -85,13 +85,71 @@
   .tabs { position: sticky; top: 49px; z-index: 9; display: flex; background: var(--card); border-bottom: 1px solid var(--line); }
   .tabs button { flex: 1; font: inherit; font-weight: 700; padding: 12px 0; border: 0; background: transparent; color: var(--muted); border-bottom: 3px solid transparent; cursor: pointer; }
   .tabs button[aria-selected=true] { color: var(--brand); border-bottom-color: var(--brand); }
+  .tabs button { font-size: 14px; padding: 12px 2px; white-space: nowrap; min-width: 0; }
+  .tabs button { overflow: hidden; text-overflow: clip; }
+  @media (max-width: 380px) { .tabs button { font-size: 13px; letter-spacing: -0.5px; } .tab-n { line-height: 16px; } }
+  .tab-n { display: inline-block; min-width: 16px; margin-left: 2px; padding: 0 4px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; line-height: 18px; }
+  .tab-n:empty { display: none; }
+
+  /* 환자카드 · 방문예정 */
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .toolbar > input, .toolbar > .grow { flex: 1; min-width: 0; }
+  input[type=search] { width: 100%; font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; }
+  .empty { color: var(--muted); text-align: center; padding: 28px 8px; font-size: 14px; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 8px; background: var(--brand-soft); color: var(--brand); white-space: nowrap; }
+  .badge.danger { background: var(--danger-soft); color: var(--danger); }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .badge.muted { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .pcard { display: block; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 12px 14px; margin-bottom: 8px; font: inherit; color: inherit; cursor: pointer; }
+  .pcard .top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .pcard .nm { font-weight: 700; font-size: 17px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .pcard .sub { margin-top: 2px; }
+  .idcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+  .idcard .nm { font-size: 22px; font-weight: 800; }
+  .idcard .birth { font-size: 15px; color: var(--muted); margin-top: 2px; }
+  .info { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14px; margin: 12px 0 0; }
+  .info dt { color: var(--muted); }
+  .info dd { margin: 0; }
+  .idcard .row { margin-top: 12px; }
+  .idcard .row .btn { padding: 12px 6px; font-size: 15px; white-space: nowrap; }
+  .back { margin-bottom: 10px; }
+  .sec-title { font-size: 14px; font-weight: 700; color: var(--muted); margin: 16px 0 8px; }
+  .timeline { margin-left: 6px; padding-left: 16px; border-left: 2px solid var(--line); }
+  .tl-item { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; cursor: pointer; }
+  .tl-item::before { content: ""; position: absolute; left: -25px; top: 14px; width: 12px; height: 12px; border-radius: 50%;
+    background: var(--brand); border: 2px solid var(--bg); }
+  .tl-item.draft::before { background: var(--muted); }
+  .tl-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .tl-head .d { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tl-head .sub { margin-left: auto; }
+  .tl-body { margin-top: 6px; font-size: 14px; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+  .tl-item:not(.open) .tl-body { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .tl-crisis { color: var(--danger); font-weight: 700; font-size: 14px; margin-top: 6px; }
+  .tl-more { margin-top: 6px; font-size: 13px; }
+  .tl-more a { color: var(--brand); font-weight: 700; }
+  .todo { display: flex; gap: 10px; align-items: flex-start; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 8px; }
+  .todo.late { border-color: var(--danger); }
+  .todo .tick { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--muted); background: transparent; color: transparent;
+    font: inherit; font-weight: 800; cursor: pointer; padding: 0; }
+  .todo.done .tick { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .todo.done .nm { text-decoration: line-through; color: var(--muted); }
+  .todo .main { flex: 1; min-width: 0; }
+  .todo .nm { font-weight: 700; font-size: 16px; }
+  .todo .note { font-size: 14px; margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .todo .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .due { font-size: 13px; font-weight: 700; color: var(--muted); }
+  .due.late { color: var(--danger); }
+  .due.today { color: var(--brand); }
+  #tDoneBox summary { cursor: pointer; color: var(--muted); font-weight: 700; padding: 10px 2px; }
   [hidden] { display: none !important; }
   /* 동의서 */
   .clause { font-size: 14px; line-height: 1.55; background: var(--bg); border-radius: 10px; padding: 10px 12px; margin: 0 0 10px; }
   .clause p { margin: 0 0 4px; padding-left: 1.1em; text-indent: -1.1em; }
   .clause b { font-weight: 700; }
-  #cform section.card > h2 { cursor: default; }
-  #cform section.card > h2::after { content: none; }
+  #cform section.card > h2, #tFormCard > h2 { cursor: default; }
+  #cform section.card > h2::after, #tFormCard > h2::after { content: none; }
   .note { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 6px 0 0; }
   .sigwrap { border: 1px dashed var(--muted); border-radius: 12px; background: #fff; position: relative; touch-action: none; }
   .sigwrap canvas { display: block; width: 100%; height: 160px; border-radius: 12px; }
@@ -116,6 +174,8 @@
 <nav class="tabs" role="tablist">
   <button type="button" role="tab" data-tab="visit" aria-selected="true">📝 방문기록</button>
   <button type="button" role="tab" data-tab="consent" aria-selected="false">✍️ 동의서</button>
+  <button type="button" role="tab" data-tab="cards" aria-selected="false">🗂 환자카드</button>
+  <button type="button" role="tab" data-tab="todo" aria-selected="false">📅 방문예정<span class="tab-n" id="todoCount"></span></button>
 </nav>
 
 <main id="visitMain">
@@ -132,6 +192,50 @@
   <div id="cErr" class="banner danger"></div>
   <div id="cOk" class="banner ok"></div>
   <form id="cform" autocomplete="off" onsubmit="return false"></form>
+</main>
+
+<main id="cardsMain" hidden>
+  <div id="pErr" class="banner danger"></div>
+  <div id="pListView">
+    <div class="toolbar">
+      <input type="search" id="pSearch" placeholder="이름 또는 생년월일로 찾기" autocomplete="off">
+      <button class="btn small" type="button" id="pRefresh">새로고침</button>
+    </div>
+    <div id="pList"></div>
+  </div>
+  <div id="pDetail" hidden></div>
+</main>
+
+<main id="todoMain" hidden>
+  <div id="tErr" class="banner danger"></div>
+  <div id="tOk" class="banner ok"></div>
+  <section class="card" id="tFormCard">
+    <h2 id="tFormTitle">방문할 분 적기</h2>
+    <div class="body">
+      <div class="row">
+        <div class="field"><label for="t-name">이름 <span class="req">*</span></label><input type="text" id="t-name" list="patientList" autocomplete="off"></div>
+        <div class="field"><label for="t-birth">생년월일</label><input type="text" id="t-birth" inputmode="numeric" maxlength="10" placeholder="예: 19450312"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="t-due">방문 예정일</label><input type="date" id="t-due"></div>
+        <div class="field"><label for="t-author">작성자</label><input type="text" id="t-author"></div>
+      </div>
+      <div class="field"><label for="t-note">내용</label>
+        <textarea id="t-note" placeholder="왜 방문해야 하는지, 챙길 것 (예: 퇴원 후 상태 확인, 등급신청 서류 전달)"></textarea>
+        <div class="phrases" id="tPhrases"></div>
+      </div>
+      <div class="row">
+        <button class="btn" type="button" id="tCancel" hidden>취소</button>
+        <button class="btn primary" type="button" id="tSave">목록에 추가</button>
+      </div>
+    </div>
+  </section>
+  <div class="toolbar">
+    <b id="tHead" class="grow">방문할 분</b>
+    <button class="btn small" type="button" id="tRefresh">새로고침</button>
+  </div>
+  <div id="tList"></div>
+  <details id="tDoneBox" hidden><summary id="tDoneHead"></summary><div id="tDone"></div></details>
 </main>
 
 <footer id="consentFooter" hidden>
@@ -439,7 +543,7 @@ function validate() {
 function callServer(fn, arg) {
   return new Promise((resolve, reject) => {
     if (!IS_GAS) {
-      setTimeout(() => fn === 'getInitData' ? resolve({ patients: [] }) : resolve({ ok: true, docUrl: '', demo: true }), 400);
+      setTimeout(() => resolve(demoServer(fn, arg)), 300);
       return;
     }
     google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg);
@@ -474,6 +578,8 @@ function afterSent(rec, res) {
   flash('okBanner', `✅ ${esc(rec.meta.patient)}님 방문기록지를 드라이브 폴더에 저장했습니다.${res && res.demo ? ' (미리보기 — 실제 전송 안 됨)' : ''}${link}`, 15000);
   addPatient(rec);
   resetForm(true);
+  cardsAt = 0; // 다음에 환자카드를 열 때 새로 불러옴
+  offerTodoDone(rec);
 }
 
 function enqueue(rec) {
@@ -1031,6 +1137,11 @@ function showTab(tab) {
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
   $('visitMain').hidden = $('visitFooter').hidden = tab !== 'visit';
   $('consentMain').hidden = $('consentFooter').hidden = tab !== 'consent';
+  const wasCards = !$('cardsMain').hidden;
+  $('cardsMain').hidden = tab !== 'cards';
+  $('todoMain').hidden = tab !== 'todo';
+  if (tab === 'cards') { if (wasCards) cardKey = ''; openCards(); } // 환자카드 탭을 한 번 더 누르면 목록으로
+  if (tab === 'todo') openTodos();
   if (tab === 'consent') {
     // 방문기록에서 입력한 환자를 미리 채움
     if (!hasValue(cstate.name) && hasValue(state.patient)) { cstate.name = state.patient.trim(); cstate.birth = cstate.birth || state.birth || ''; }
@@ -1047,9 +1158,339 @@ function initConsent() {
   window.addEventListener('resize', () => { if (!$('consentMain').hidden) Object.values(pads).forEach(p => p.fit()); });
 }
 
+/* =====================================================================
+ *  환자카드 탭 — 전송·저장한 방문기록을 환자별로 묶어 날짜순으로 보여 줌
+ *  방문예정 탭 — 방문해야 할 분 목록 (시트 '방문예정' 탭에 저장, 팀이 같이 봄)
+ * ===================================================================== */
+const CARD_INFO = ['장기요양등급', '장기요양기관명', '장애정도', '장애유형', '동거형태', '주돌봄자', '소득구분'];
+const TODO_PHRASES = ['첫 방문 상담', '정기 방문', '퇴원 후 상태 확인', '서류 전달·수거', '보호자 동석 요청', '위기신호 재확인'];
+const KEY_DEMO_TODO = 'hv_demo_todos';
+const STATUS_DRAFT_TEXT = '임시저장';
+const STALE_MS = 60 * 1000; // 탭을 다시 열 때 1분이 지났으면 새로 불러옴
+let cards = null, cardsAt = 0, cardsLoading = false, cardKey = '';
+let todos = [], todosAt = 0, todosLoaded = false, tEditId = '';
+
+/* 미리보기(구글 배포 전)에서 쓰는 가짜 서버 */
+function demoServer(fn, arg) {
+  if (fn === 'getInitData') return { patients: [] };
+  if (fn === 'getPatientCards') return { cards: [] };
+  if (fn === 'getTodos') return { todos: LS.get(KEY_DEMO_TODO, []) };
+  if (fn === 'saveTodo') {
+    const list = LS.get(KEY_DEMO_TODO, []);
+    const prev = list.find(x => x.id === arg.id) || {};
+    const t = Object.assign({}, arg, { created: prev.created || nowText(), doneAt: arg.done ? (prev.doneAt || nowText()) : '' });
+    LS.set(KEY_DEMO_TODO, list.filter(x => x.id !== arg.id).concat(t));
+    return { ok: true, todo: t };
+  }
+  if (fn === 'deleteTodo') { LS.set(KEY_DEMO_TODO, LS.get(KEY_DEMO_TODO, []).filter(x => x.id !== arg)); return { ok: true }; }
+  return { ok: true, docUrl: '', demo: true };
+}
+function nowText() { return today() + ' ' + new Date().toTimeString().slice(0, 8); }
+function errText(err) { return err && err.message ? err.message : '네트워크'; }
+
+/* 19450312 → 만 나이 */
+function ageOf(birth) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birth || '');
+  if (!m) return '';
+  const t = today();
+  let a = +t.slice(0, 4) - +m[1];
+  if (t.slice(5) < m[2] + '-' + m[3]) a--;
+  return a >= 0 && a < 130 ? a : '';
+}
+function birthText(birth) {
+  if (!birth) return '생년월일 없음';
+  const a = ageOf(birth);
+  return birth + (a !== '' ? ` (만 ${a}세)` : '');
+}
+function crisisOf(v) {
+  return (v.crisis || '').split(', ').filter(x => x && x !== '해당 없음').join(', ');
+}
+function sameName(a, b) { return String(a || '').trim() === String(b || '').trim(); }
+function openTodosFor(name, birth) {
+  return todos.filter(t => !t.done && sameName(t.name, name) && (!t.birth || !birth || t.birth === birth));
+}
+/* 지금 보이는 탭의 빨간 안내줄에 표시 */
+function pageError(msg) {
+  const id = !$('cardsMain').hidden ? 'pErr' : !$('todoMain').hidden ? 'tErr' : 'errBanner';
+  const b = $(id); b.textContent = msg; b.classList.add('show');
+  clearTimeout(b._t); b._t = setTimeout(() => b.classList.remove('show'), 12000);
+}
+
+/* ---------- 환자카드 ---------- */
+function openCards(fresh) {
+  if (fresh || !cards || Date.now() - cardsAt > STALE_MS) loadCards();
+  renderCards();
+}
+function loadCards() {
+  if (cardsLoading) return;
+  cardsLoading = true;
+  renderCards();
+  callServer('getPatientCards')
+    .then(d => { cards = d.cards || []; cardsAt = Date.now(); })
+    .catch(err => pageError('환자카드를 불러오지 못했습니다(' + errText(err) + '). [새로고침]을 눌러 주세요.'))
+    .then(() => { cardsLoading = false; renderCards(); });
+}
+function renderCards() {
+  const c = cardKey && (cards || []).find(x => x.key === cardKey);
+  if (cardKey && cards && !c) cardKey = '';
+  $('pListView').hidden = !!c;
+  $('pDetail').hidden = !c;
+  if (c) renderCardDetail(c); else renderCardList();
+}
+function renderCardList() {
+  const q = $('pSearch').value.trim().replace(/-/g, '');
+  const list = (cards || []).filter(c => !q || c.name.indexOf(q) >= 0 || (c.birth || '').replace(/-/g, '').indexOf(q) >= 0);
+  let html;
+  if (!cards) html = `<div class="empty">${cardsLoading ? '불러오는 중…' : '환자카드를 불러오지 못했습니다.'}</div>`;
+  else if (!list.length) html = `<div class="empty">${q ? '찾는 분이 없습니다.' : IS_GAS
+    ? '아직 방문기록이 없습니다.<br>[방문기록] 탭에서 저장·전송하면 여기에 환자카드가 생깁니다.'
+    : '미리보기 모드에서는 환자카드가 비어 있습니다.'}</div>`;
+  else html = list.map(c => {
+    const last = c.visits[0] || {};
+    const crisis = crisisOf(last);
+    const planned = openTodosFor(c.name, c.birth).length;
+    return `<button type="button" class="pcard" data-act="card" data-key="${esc(c.key)}">
+      <div class="top"><span class="nm">${esc(c.name)}</span><span class="sub">${esc(birthText(c.birth))}</span>
+        ${crisis ? '<span class="badge danger">⚠ 위기신호</span>' : ''}${planned ? '<span class="badge">📅 방문예정</span>' : ''}</div>
+      <div class="sub">방문 ${c.visits.length}회 · 최근 ${esc(last.date || '-')}${last.type ? ' ' + esc(last.type) : ''}${last.author ? ' · ' + esc(last.author) : ''}</div>
+    </button>`;
+  }).join('');
+  if (cards && cardsLoading) html = '<div class="sub" style="margin-bottom:8px">새로 불러오는 중…</div>' + html;
+  $('pList').innerHTML = html;
+}
+function renderCardDetail(c) {
+  const info = CARD_INFO.filter(k => c.info && c.info[k]);
+  const planned = openTodosFor(c.name, c.birth);
+  $('pDetail').innerHTML = `
+    <button type="button" class="btn small back" data-act="back">← 환자 목록</button>
+    <div class="idcard">
+      <div class="nm">${esc(c.name)}</div>
+      <div class="birth">${esc(birthText(c.birth))}</div>
+      ${info.length ? `<dl class="info">${info.map(k => `<dt>${esc(k)}</dt><dd>${esc(c.info[k])}</dd>`).join('')}</dl>` : ''}
+      <div class="row">
+        <button type="button" class="btn primary" data-act="write">📝 방문기록 쓰기</button>
+        <button type="button" class="btn" data-act="plan">📅 방문예정 추가</button>
+      </div>
+    </div>
+    ${planned.length ? `<div class="sec-title">방문예정 ${planned.length}건</div>${planned.map(todoHtml).join('')}` : ''}
+    <div class="sec-title">방문 기록 ${c.visits.length}건 · 최근 순 (누르면 펼쳐짐)</div>
+    <div class="timeline">${c.visits.map(visitHtml).join('')}</div>`;
+}
+function visitHtml(v) {
+  const draft = v.status === STATUS_DRAFT_TEXT;
+  const crisis = crisisOf(v);
+  const body = [v.memo, v.plan ? '▶ 계획: ' + v.plan : '', v.needs ? '· 욕구: ' + v.needs : ''].filter(Boolean).join('\n');
+  return `<div class="tl-item${draft ? ' draft' : ''}" data-act="toggle">
+    <div class="tl-head"><span class="d">${esc(v.date || '날짜 없음')}</span>
+      ${v.type ? `<span class="badge muted">${esc(v.type)}</span>` : ''}${draft ? '<span class="badge muted">임시저장</span>' : ''}
+      <span class="sub">${esc(v.author || '')}</span></div>
+    ${crisis ? `<div class="tl-crisis">⚠ ${esc(crisis)}</div>` : ''}
+    <div class="tl-body">${body ? esc(body) : '<span class="sub">적은 상담내용 없음</span>'}</div>
+    ${/^https:\/\//.test(v.doc || '') ? `<div class="tl-more"><a href="${esc(v.doc)}" target="_blank" rel="noopener">방문기록지 열기 ↗</a></div>` : ''}
+  </div>`;
+}
+/* 환자카드·방문예정에서 [방문기록 쓰기] → 방문기록 탭에 이름·생년월일을 채움 */
+function startVisitFor(name, birth) {
+  const cur = (state.patient || '').trim();
+  const moved = cur && cur !== name;
+  if (moved) { saveCurrent(true); resetForm(true); }
+  state.patient = name;
+  if (birth && (moved || !cur || !state.birth)) state.birth = birth;
+  showTab('visit');
+  paint(); saveDraft();
+  onPatientPicked();
+  if (moved) flash('okBanner', `쓰던 ${esc(cur)}님 기록은 [저장] 목록에 보관했습니다. ${$('okBanner').classList.contains('show') ? $('okBanner').innerHTML : ''}`);
+}
+
+/* ---------- 방문예정 ---------- */
+function openTodos() {
+  if (!todosLoaded || Date.now() - todosAt > STALE_MS) loadTodos();
+  renderTodos();
+}
+function loadTodos() {
+  return callServer('getTodos')
+    .then(d => { todos = d.todos || []; todosLoaded = true; todosAt = Date.now(); renderTodos(); })
+    .catch(err => { if (!$('todoMain').hidden) pageError('방문예정을 불러오지 못했습니다(' + errText(err) + '). [새로고침]을 눌러 주세요.'); });
+}
+function dueInfo(due) {
+  if (!due) return { cls: '', text: '날짜 미정' };
+  const diff = Math.round((Date.parse(due) - Date.parse(today())) / 86400000);
+  const d = new Date(due + 'T00:00:00');
+  const label = isNaN(d) ? due : `${d.getMonth() + 1}/${d.getDate()} (${'일월화수목금토'[d.getDay()]})`;
+  if (isNaN(diff)) return { cls: '', text: label };
+  if (diff < 0) return { cls: 'late', text: `${label} · ${-diff}일 지남` };
+  if (diff === 0) return { cls: 'today', text: `오늘 ${label}` };
+  if (diff === 1) return { cls: '', text: `내일 ${label}` };
+  return { cls: '', text: `${label} · ${diff}일 뒤` };
+}
+function todoHtml(t) {
+  const di = dueInfo(t.due);
+  const id = esc(t.id);
+  return `<div class="todo${t.done ? ' done' : ''}${!t.done && di.cls === 'late' ? ' late' : ''}">
+    <button type="button" class="tick" data-act="t-done" data-id="${id}" aria-label="${t.done ? '완료 취소' : '방문 완료로 표시'}">✓</button>
+    <div class="main">
+      <div class="top"><span class="nm">${esc(t.name)}</span> <span class="sub">${esc(t.birth || '')}</span></div>
+      <div class="due ${t.done ? '' : di.cls}">${t.done ? '✓ 완료 ' + esc(String(t.doneAt || '').slice(0, 10)) : '📅 ' + esc(di.text)}</div>
+      ${t.note ? `<div class="note">${esc(t.note)}</div>` : ''}
+      ${t.author ? `<div class="sub">${esc(t.author)} 작성</div>` : ''}
+      <div class="acts">
+        ${t.done ? '' : `<button type="button" class="btn small" data-act="t-write" data-id="${id}">📝 방문기록 쓰기</button>`}
+        <button type="button" class="btn small" data-act="t-edit" data-id="${id}">수정</button>
+        <button type="button" class="btn small" data-act="t-del" data-id="${id}">삭제</button>
+      </div>
+    </div>
+  </div>`;
+}
+function renderTodos() {
+  const open = todos.filter(t => !t.done)
+    .sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || String(a.created).localeCompare(String(b.created)));
+  const done = todos.filter(t => t.done).sort((a, b) => String(b.doneAt).localeCompare(String(a.doneAt))).slice(0, 30);
+  $('tHead').textContent = `방문할 분 ${open.length}명`;
+  $('tList').innerHTML = open.length ? open.map(todoHtml).join('')
+    : `<div class="empty">${todosLoaded ? '방문할 분이 없습니다. 위 칸에 적어 두세요.' : '불러오는 중…'}</div>`;
+  $('tDoneBox').hidden = !done.length;
+  $('tDoneHead').textContent = `완료한 방문 ${done.length}건${done.length === 30 ? ' (최근 30건)' : ''}`;
+  $('tDone').innerHTML = done.map(todoHtml).join('');
+  const due = open.filter(t => t.due && t.due <= today()).length;
+  $('todoCount').textContent = due ? String(due) : '';
+  if (!$('cardsMain').hidden && cards) renderCards(); // 카드의 방문예정 표시도 함께 갱신
+}
+function upsertTodo(t) {
+  todos = todos.filter(x => x.id !== t.id).concat(t);
+  renderTodos();
+}
+function tFormFill(t) {
+  $('t-name').value = t.name || '';
+  $('t-birth').value = t.birth || '';
+  $('t-due').value = t.due || '';
+  $('t-author').value = t.author || LS.get(KEY_AUTHOR, '');
+  $('t-note').value = t.note || '';
+}
+function tFormReset() {
+  tEditId = '';
+  tFormFill({});
+  $('tFormTitle').textContent = '방문할 분 적기';
+  $('tSave').textContent = '목록에 추가';
+  $('tCancel').hidden = true;
+}
+function editTodo(id) {
+  const t = todos.find(x => x.id === id);
+  if (!t) return;
+  showTab('todo');
+  tEditId = id;
+  tFormFill(t);
+  $('tFormTitle').textContent = `${t.name}님 방문예정 수정`;
+  $('tSave').textContent = '수정 저장';
+  $('tCancel').hidden = false;
+  $('t-note').focus();
+}
+async function tSubmit() {
+  const name = $('t-name').value.trim();
+  if (!name) { pageError('방문할 분 이름을 입력해 주세요.'); $('t-name').focus(); return; }
+  const prev = todos.find(x => x.id === tEditId);
+  const t = {
+    id: tEditId || uid(), name: name, birth: $('t-birth').value.trim(), due: $('t-due').value,
+    author: $('t-author').value.trim(), note: $('t-note').value.trim(), done: prev ? prev.done : false
+  };
+  if (t.author) LS.set(KEY_AUTHOR, t.author);
+  const btn = $('tSave');
+  btn.disabled = true; btn.textContent = '저장 중…';
+  try {
+    const res = await callServer('saveTodo', t);
+    upsertTodo(Object.assign({}, prev, t, res && res.todo));
+    tFormReset();
+    flash('tOk', `📅 ${esc(name)}님을 방문예정에 ${prev ? '수정' : '추가'}했습니다.${IS_GAS ? '' : ' (미리보기 — 이 휴대폰에만 저장)'}`);
+  } catch (err) {
+    pageError('저장하지 못했습니다(' + errText(err) + '). 적은 내용은 그대로 있으니 신호가 잡히면 다시 눌러 주세요.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = tEditId ? '수정 저장' : '목록에 추가';
+  }
+}
+async function setTodoDone(id, done) {
+  const t = todos.find(x => x.id === id);
+  if (!t) return;
+  const before = { done: t.done, doneAt: t.doneAt };
+  t.done = done; t.doneAt = done ? nowText() : '';
+  renderTodos();
+  try {
+    const res = await callServer('saveTodo', Object.assign({}, t));
+    if (res && res.todo) upsertTodo(Object.assign({}, t, res.todo));
+  } catch (err) {
+    Object.assign(t, before);
+    renderTodos();
+    pageError('완료 표시를 저장하지 못했습니다(' + errText(err) + ').');
+  }
+}
+async function removeTodo(id) {
+  const t = todos.find(x => x.id === id);
+  if (!t || !confirm(`${t.name}님 방문예정을 삭제할까요? (완료했다면 ✓를 눌러 주세요)`)) return;
+  try {
+    await callServer('deleteTodo', id);
+    todos = todos.filter(x => x.id !== id);
+    renderTodos();
+  } catch (err) {
+    pageError('삭제하지 못했습니다(' + errText(err) + ').');
+  }
+}
+/* 방문기록을 보낸 뒤: 같은 분 방문예정이 있으면 완료 버튼을 보여 줌 */
+function offerTodoDone(rec) {
+  const open = openTodosFor(rec.meta.patient, rec.meta.birth);
+  if (!open.length) return;
+  $('okBanner').insertAdjacentHTML('beforeend', ` <button class="btn small" type="button" id="todoDoneOffer">📅 방문예정 ${open.length}건 완료로 표시</button>`);
+  $('todoDoneOffer').addEventListener('click', async () => {
+    for (const t of open) await setTodoDone(t.id, true);
+    flash('okBanner', `📅 ${esc(rec.meta.patient)}님 방문예정을 완료로 표시했습니다.`);
+  });
+}
+
+/* 환자카드·방문예정 탭의 버튼 */
+function onListAction(e) {
+  if (e.target.closest('a')) return;
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const act = el.dataset.act, c = (cards || []).find(x => x.key === cardKey);
+  const t = el.dataset.id && todos.find(x => x.id === el.dataset.id);
+  if (act === 'card') { cardKey = el.dataset.key; renderCards(); window.scrollTo({ top: 0 }); }
+  else if (act === 'back') { cardKey = ''; renderCards(); }
+  else if (act === 'toggle') el.classList.toggle('open');
+  else if (act === 'write' && c) startVisitFor(c.name, c.birth);
+  else if (act === 'plan' && c) { showTab('todo'); tFormReset(); tFormFill({ name: c.name, birth: c.birth }); $('t-note').focus(); }
+  else if (act === 't-done' && t) setTodoDone(t.id, !t.done);
+  else if (act === 't-write' && t) startVisitFor(t.name.trim(), t.birth);
+  else if (act === 't-edit' && t) editTodo(t.id);
+  else if (act === 't-del' && t) removeTodo(t.id);
+}
+function initLists() {
+  $('cardsMain').addEventListener('click', onListAction);
+  $('todoMain').addEventListener('click', onListAction);
+  $('pSearch').addEventListener('input', renderCardList);
+  $('pRefresh').addEventListener('click', () => openCards(true));
+  $('tRefresh').addEventListener('click', () => { loadTodos(); });
+  $('tSave').addEventListener('click', tSubmit);
+  $('tCancel').addEventListener('click', tFormReset);
+  $('t-birth').addEventListener('input', e => { e.target.value = formatBirth(e.target.value); });
+  $('t-name').addEventListener('change', () => {
+    // 전에 방문한 분이면 생년월일을 채움 (같은 이름이 한 분일 때만)
+    const births = patients.filter(p => sameName(p.name, $('t-name').value) && p.birth).map(p => p.birth)
+      .filter((b, i, a) => a.indexOf(b) === i);
+    if (births.length === 1 && !$('t-birth').value) $('t-birth').value = births[0];
+  });
+  $('tPhrases').innerHTML = TODO_PHRASES.map(p => `<button type="button" class="phrase" data-val="${esc(p)}">+ ${esc(p)}</button>`).join('');
+  $('tPhrases').addEventListener('click', e => {
+    const v = e.target.dataset && e.target.dataset.val;
+    if (!v) return;
+    const cur = $('t-note').value.trim();
+    $('t-note').value = cur ? cur + ' ' + v : v;
+  });
+  tFormReset();
+  loadTodos();
+}
+
 function init() {
   render();
   initConsent();
+  initLists();
   state = Object.assign(freshState(), LS.get(KEY_DRAFT, {}));
   paint();
   if (hasValue(state.patient)) flash('okBanner', '작성 중이던 기록을 불러왔습니다.');

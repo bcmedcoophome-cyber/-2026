@@ -1,6 +1,10 @@
 /**
  * 재택의료 사회복지 방문상담 체크리스트 — Google Apps Script 서버 코드
  *
+ * ▶ 휴대폰 화면(Index.html)은 GitHub에서 자동으로 불러옵니다.
+ *   그래서 화면·항목을 고칠 때는 다시 배포할 필요가 없고, 앱 주소도 바뀌지 않습니다.
+ *   (GitHub를 못 읽을 때만 이 프로젝트 안의 Index 파일을 대신 씁니다)
+ *
  * 휴대폰에서 체크한 상담 내용을 받아
  *   1) [저장] 시 구글 시트(방문기록)에 '임시저장'으로 기록하고
  *   2) [전송] 시 같은 줄을 '전송완료'로 바꾸고, 방문 건마다 구글 문서 「방문기록지_환자명_작성자_날짜」를
@@ -10,7 +14,10 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-10-26'; // 휴대폰 화면 아래에 표시됨: 이 날짜가 보이면 최신 코드
+const APP_VERSION = '2026-10-27'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+// 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
+const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
+const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
 // 방문기록지를 저장할 구글 드라이브 폴더 (「환자별 방문기록지 (사회복지)」)
 // 폴더 주소 https://drive.google.com/drive/folders/ 뒤의 ID 부분입니다.
 const TARGET_FOLDER_ID = '1LA6KMNOLoPhVf8H1qza6v6voN-U-PfeG';
@@ -25,10 +32,52 @@ const LINK_HEADER = '방문기록지';
 const DOC_TITLE = '재택의료 방문기록지';
 const CREATE_DOC = true; // 방문 건별 방문기록지(구글 문서)가 필요 없으면 false
 
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+function doGet(e) {
+  const fresh = e && e.parameter && e.parameter.fresh;
+  return HtmlService.createHtmlOutput(loadHtml_(!!fresh))
     .setTitle(APP_TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
+}
+
+/** GitHub의 최신 화면을 읽음 (5분 저장). 실패하면 프로젝트 안의 Index 파일 */
+function loadHtml_(fresh) {
+  const cache = CacheService.getScriptCache();
+  if (!fresh) {
+    const hit = getCachedHtml_(cache);
+    if (hit) return hit;
+  }
+  try {
+    const res = UrlFetchApp.fetch(HTML_URL, { muteHttpExceptions: true, followRedirects: true });
+    const html = res.getResponseCode() === 200 ? res.getContentText('UTF-8') : '';
+    if (html.indexOf('</html>') > 0 && html.indexOf('google.script.run') > 0) {
+      putCachedHtml_(cache, html);
+      return html;
+    }
+  } catch (err) { /* 아래 예비 화면 사용 */ }
+  return HtmlService.createHtmlOutputFromFile('Index').getContent();
+}
+
+/* 캐시 한 칸은 100KB까지라 화면을 90,000자씩 나눠 저장 */
+const HTML_CHUNK = 90000;
+function putCachedHtml_(cache, html) {
+  try {
+    const parts = {};
+    let n = 0;
+    for (let i = 0; i < html.length; i += HTML_CHUNK) parts['html_' + n++] = html.slice(i, i + HTML_CHUNK);
+    parts['html_n'] = String(n);
+    cache.putAll(parts, HTML_CACHE_SECONDS);
+  } catch (err) { /* 저장 못 해도 화면은 그대로 보여 줌 */ }
+}
+function getCachedHtml_(cache) {
+  try {
+    const n = Number(cache.get('html_n') || 0);
+    if (!n) return '';
+    const keys = [];
+    for (let i = 0; i < n; i++) keys.push('html_' + i);
+    const got = cache.getAll(keys);
+    if (keys.some(k => !got[k])) return '';
+    return keys.map(k => got[k]).join('');
+  } catch (err) { return ''; }
 }
 
 /** 처음 한 번 편집기에서 실행: 권한 승인 + 드라이브 폴더/시트 생성 */
@@ -36,6 +85,8 @@ function setup() {
   const { folder, ss } = ensureStorage_();
   Logger.log('저장 폴더: ' + folder.getUrl());
   Logger.log('기록 시트: ' + ss.getUrl());
+  const code = UrlFetchApp.fetch(HTML_URL, { muteHttpExceptions: true }).getResponseCode();
+  Logger.log(code === 200 ? '화면: GitHub에서 불러옴' : '화면: GitHub 읽기 실패(' + code + ') → 프로젝트 안 Index 파일 사용');
 }
 
 /** 화면을 열 때 환자 목록(지난 기록 포함)과 저장 위치를 돌려줌 */

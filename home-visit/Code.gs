@@ -57,8 +57,8 @@ function loadHtml_(fresh) {
   return HtmlService.createHtmlOutputFromFile('Index').getContent();
 }
 
-/* 캐시 한 칸은 100KB까지라 화면을 90,000자씩 나눠 저장 */
-const HTML_CHUNK = 90000;
+/* 캐시 한 칸은 100KB까지라 화면을 나눠 저장 (한글은 한 글자 3바이트라 30,000자씩) */
+const HTML_CHUNK = 30000;
 function putCachedHtml_(cache, html) {
   try {
     const parts = {};

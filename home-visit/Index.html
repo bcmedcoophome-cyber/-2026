@@ -274,6 +274,18 @@
 <datalist id="patientList"></datalist>
 
 <script>
+/* 오류가 나면 화면 맨 위에 빨간 글씨로 보여 줌 (원인 확인용) */
+window.addEventListener('error', function (e) {
+  try {
+    var box = document.getElementById('jsErr');
+    if (!box) { box = document.createElement('div'); box.id = 'jsErr';
+      box.style.cssText = 'background:#fce8e6;color:#c5221f;font:14px/1.5 sans-serif;padding:10px 14px;white-space:pre-wrap;word-break:break-all';
+      (document.body || document.documentElement).insertBefore(box, (document.body || document.documentElement).firstChild); }
+    box.textContent += '⚠ 화면 오류: ' + (e.message || e) + (e.lineno ? ' (줄 ' + e.lineno + ':' + e.colno + ')' : '') + '\n';
+  } catch (x) {}
+});
+</script>
+<script>
 /* =====================================================================
  *  체크리스트 항목 정의 — 센터 상황에 맞게 이 부분만 고치면 됩니다.
  *  type: text | date | single(하나 선택) | multi(여러 개) | memo(긴 글)
@@ -327,7 +339,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-10-27b'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-10-27c'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -1526,7 +1538,7 @@ function init() {
     }).catch(err => showError('드라이브 연결 확인 필요: ' + (err && err.message ? err.message : err)));
   }
 }
-init();
+try { init(); } catch (err) { setTimeout(function () { throw err; }); }
 </script>
 </body>
 </html>

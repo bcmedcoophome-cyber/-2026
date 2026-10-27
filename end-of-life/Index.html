@@ -24,6 +24,10 @@
   header { position: sticky; top: 0; z-index: 10; background: var(--card); border-bottom: 1px solid var(--line);
     padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
   header h1 { font-size: 22px; margin: 0; flex: 1; }
+  .tabs { display: flex; background: var(--card); border-bottom: 2px solid var(--line); }
+  .tabs .tab { flex: 1; text-align: center; padding: 14px 0; font-size: 20px; font-weight: 700; color: var(--muted);
+    text-decoration: none; border-bottom: 4px solid transparent; }
+  .tabs .tab.on { color: var(--brand); border-bottom-color: var(--brand); }
   #progress { font-size: 17px; font-weight: 700; color: var(--muted); white-space: nowrap; }
   #progress.done { color: var(--ok); }
   main { max-width: 640px; margin: 0 auto; padding: 14px 16px 180px; }
@@ -108,6 +112,10 @@
   <h1>🕊 생애말기 활동기록</h1>
   <span id="progress"></span>
 </header>
+<nav class="tabs">
+  <span class="tab on" aria-current="page">📝 기록하기</span>
+  <a class="tab" href="https://www.bcmedcoop.org/careg/#s12" target="_blank" rel="noopener">📖 매뉴얼</a>
+</nav>
 
 <main>
   <div id="demoBanner" class="banner info">미리보기 화면입니다. 구글 Apps Script로 배포해야 드라이브에 저장됩니다.</div>
@@ -177,7 +185,7 @@ const TEAMS = ['따품안', '임종하면', '해바라기', '햇살동행'];
  *  showIf: 다른 항목이 특정 값일 때만 보임
  * ===================================================================== */
 const KIND = { name: '방문기록지', filePrefix: '생애말기활동가기록지', docTitle: '생애말기활동가기록지' };
-const UI_VERSION = '2026-10-25e'; // 화면 버전 (GitHub에서 고치면 올림)
+const UI_VERSION = '2026-10-27'; // 화면 버전 (GitHub에서 고치면 올림)
 const FORM = [
   { key: 'date', label: '방문날짜', type: 'date', required: true },
   { key: 'time', label: '활동 시간', type: 'timerange', required: true, hint: '시작한 시간과 끝난 시간을 넣어 주세요' },

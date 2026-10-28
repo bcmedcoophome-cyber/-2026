@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-10-27'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-10-28'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -49,12 +49,17 @@ function loadHtml_(fresh) {
   try {
     const res = UrlFetchApp.fetch(HTML_URL, { muteHttpExceptions: true, followRedirects: true });
     const html = res.getResponseCode() === 200 ? res.getContentText('UTF-8') : '';
-    if (html.indexOf('</html>') > 0 && html.indexOf('google.script.run') > 0) {
+    if (isWholeHtml_(html)) {
       putCachedHtml_(cache, html);
       return html;
     }
   } catch (err) { /* 아래 예비 화면 사용 */ }
   return HtmlService.createHtmlOutputFromFile('Index').getContent();
+}
+
+/** 화면 파일이 끝까지 온전히 있는지 확인 */
+function isWholeHtml_(html) {
+  return !!html && html.indexOf('google.script.run') > 0 && /<\/script>\s*<\/body>\s*<\/html>\s*$/.test(html);
 }
 
 /* 캐시 한 칸은 100KB까지라 화면을 나눠 저장 (한글은 한 글자 3바이트라 30,000자씩) */
@@ -76,7 +81,9 @@ function getCachedHtml_(cache) {
     for (let i = 0; i < n; i++) keys.push('html_' + i);
     const got = cache.getAll(keys);
     if (keys.some(k => !got[k])) return '';
-    return keys.map(k => got[k]).join('');
+    const html = keys.map(k => got[k]).join('');
+    // 잘리거나 섞인 화면은 쓰지 않음 (탭 글자만 보이고 아무것도 안 눌리는 문제 방지)
+    return isWholeHtml_(html) ? html : '';
   } catch (err) { return ''; }
 }
 

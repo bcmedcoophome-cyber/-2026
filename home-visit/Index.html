@@ -339,7 +339,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-10-27c'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-10-28c'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -711,9 +711,9 @@ function resetForm(silent) {
   if (!silent && !confirm('입력 중인 내용을 지우고 새 방문을 시작할까요?')) return;
   state = freshState();
   LS.del(KEY_DRAFT); LS.del(KEY_START);
-  document.querySelectorAll('section.card').forEach(s => {
+  document.querySelectorAll('#form section.card').forEach(s => {
     const sec = FORM.find(x => x.id === s.dataset.sec);
-    s.classList.toggle('closed', !sec.open);
+    if (sec) s.classList.toggle('closed', !sec.open);
   });
   paint(); tick();
   $('draftState').textContent = '저장: 휴대폰+시트에 임시저장 · 전송: 방문기록지 만들기' + ($('draftState').dataset.version ? ' · ' + $('draftState').dataset.version : '');
@@ -788,7 +788,7 @@ const PROXY_ITEMS = [
 const ADMIN_TEXT = '본인은 위 사업 업무처리와 관련하여 담당 직원이 「전자정부법」 제36조제2항에 따른 행정정보의 공동이용을 통하여 가족관계를 확인하는 것에 동의합니다.';
 const ADMIN_NOTE = '※ ‘행정정보 공동이용 동의서’에 동의하지 아니하거나 행정정보 공동이용을 통해 가족관계 확인이 불가할 경우, 반드시 증빙서류(가족관계증명서 등(3개월 이내))를 제출해야 합니다.';
 
-/* ---- 의료기관용 [별지 제2호 서식] (보내 주신 서식 문구 그대로) ---- */
+/* ---- 재택의료센터용(서식상 의료기관용) [별지 제2호 서식] (보내 주신 서식 문구 그대로) ---- */
 const PURPOSE_C = '장기요양 재택의료센터 시범사업 관련 업무수행';
 const HEALTH_ITEMS = '건강정보(의료기관명, 질병명, 질병코드, 급여내역 및 횟수), 방문 기본정보(서비스* 이용내역(실시일, 소요시간, 방문사유, 수행인력, 진료 및 간호정보(조치내용 및 향후 계획))), 장기요양(인정번호, 인정등급, 인정유효기간)정보, 방문진료료 본인부담률 및 부담액, 가정간호·일차의료 만성질환관리·장애인 건강주치의 시범사업 및 장기요양급여 이용여부와 일시';
 const HEALTH_NOTE = '* 포괄 평가 및 케어플랜, 직종별 방문점검 서비스(방문진료·간호, 대상자 모니터링, 점검 및 평가, 서비스 연계·조정 결과 등 포함)';
@@ -846,8 +846,8 @@ const FORMS = {
     proxyNote: '※ 대리인(가족)이 신청서 및 개인정보 수집·이용 및 제공 동의서를 작성하여 제출하는 경우에만 작성합니다.',
     self: SELF_ITEMS, proxy: PROXY_ITEMS, admin: true,
     addressee: '국민건강보험공단 귀중' },
-  clinic: { label: '의료기관용', no: '[별지 제2호 서식]',
-    title: '「장기요양 재택의료센터 시범사업」 참여를 위한\n신청서 및 개인정보 수집·이용·제3자 제공 동의서 (의료기관용)',
+  clinic: { label: '재택의료센터용', no: '[별지 제2호 서식]',
+    title: '「장기요양 재택의료센터 시범사업」 참여를 위한\n신청서 및 개인정보 수집·이용·제3자 제공 동의서 (재택의료센터용)',
     section: '[ 개인정보 수집·이용·제3자 제공 동의서 ]',
     intro: '「장기요양 재택의료센터 시범사업」 참여를 위하여 아래의 개인정보 수집·이용 및 제3자 제공에 대한 내용을 자세히 읽어 보신 후 동의 여부를 결정하여 주시기 바랍니다.',
     proxySection: '[ 대리인의 개인정보 수집·이용·제3자 제공 동의서 ]',
@@ -1299,7 +1299,7 @@ function visitHtml(v) {
       <span class="sub">${esc(v.author || '')}</span></div>
     ${crisis ? `<div class="tl-crisis">⚠ ${esc(crisis)}</div>` : ''}
     <div class="tl-body">${body ? esc(body) : '<span class="sub">적은 상담내용 없음</span>'}</div>
-    ${/^https:\/\//.test(v.doc || '') ? `<div class="tl-more"><a href="${esc(v.doc)}" target="_blank" rel="noopener">방문기록지 열기 ↗</a></div>` : ''}
+    ${String(v.doc || '').indexOf('https:' + '/' + '/') === 0 ? `<div class="tl-more"><a href="${esc(v.doc)}" target="_blank" rel="noopener">방문기록지 열기 ↗</a></div>` : ''}
   </div>`;
 }
 /* 환자카드·방문예정에서 [방문기록 쓰기] → 방문기록 탭에 이름·생년월일을 채움 */

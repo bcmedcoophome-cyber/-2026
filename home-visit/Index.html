@@ -339,7 +339,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-10-28'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-10-28b'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -1299,7 +1299,7 @@ function visitHtml(v) {
       <span class="sub">${esc(v.author || '')}</span></div>
     ${crisis ? `<div class="tl-crisis">⚠ ${esc(crisis)}</div>` : ''}
     <div class="tl-body">${body ? esc(body) : '<span class="sub">적은 상담내용 없음</span>'}</div>
-    ${/^https:\/\//.test(v.doc || '') ? `<div class="tl-more"><a href="${esc(v.doc)}" target="_blank" rel="noopener">방문기록지 열기 ↗</a></div>` : ''}
+    ${String(v.doc || '').indexOf('https:' + '/' + '/') === 0 ? `<div class="tl-more"><a href="${esc(v.doc)}" target="_blank" rel="noopener">방문기록지 열기 ↗</a></div>` : ''}
   </div>`;
 }
 /* 환자카드·방문예정에서 [방문기록 쓰기] → 방문기록 탭에 이름·생년월일을 채움 */

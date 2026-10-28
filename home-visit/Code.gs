@@ -1,6 +1,10 @@
 /**
  * 재택의료 사회복지 방문상담 체크리스트 — Google Apps Script 서버 코드
  *
+ * ▶ 휴대폰 화면(Index.html)은 GitHub에서 자동으로 불러옵니다.
+ *   그래서 화면·항목을 고칠 때는 다시 배포할 필요가 없고, 앱 주소도 바뀌지 않습니다.
+ *   (GitHub를 못 읽을 때만 이 프로젝트 안의 Index 파일을 대신 씁니다)
+ *
  * 휴대폰에서 체크한 상담 내용을 받아
  *   1) [저장] 시 구글 시트(방문기록)에 '임시저장'으로 기록하고
  *   2) [전송] 시 같은 줄을 '전송완료'로 바꾸고, 방문 건마다 구글 문서 「방문기록지_환자명_작성자_날짜」를
@@ -10,7 +14,10 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-10-28'; // 휴대폰 화면 아래에 표시됨: 이 날짜가 보이면 최신 코드
+const APP_VERSION = '2026-10-28'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+// 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
+const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
+const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
 // 방문기록지를 저장할 구글 드라이브 폴더 (「환자별 방문기록지 (사회복지)」)
 // 폴더 주소 https://drive.google.com/drive/folders/ 뒤의 ID 부분입니다.
 const TARGET_FOLDER_ID = '1LA6KMNOLoPhVf8H1qza6v6voN-U-PfeG';
@@ -25,10 +32,59 @@ const LINK_HEADER = '방문기록지';
 const DOC_TITLE = '재택의료 방문기록지';
 const CREATE_DOC = true; // 방문 건별 방문기록지(구글 문서)가 필요 없으면 false
 
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+function doGet(e) {
+  const fresh = e && e.parameter && e.parameter.fresh;
+  return HtmlService.createHtmlOutput(loadHtml_(!!fresh))
     .setTitle(APP_TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
+}
+
+/** GitHub의 최신 화면을 읽음 (5분 저장). 실패하면 프로젝트 안의 Index 파일 */
+function loadHtml_(fresh) {
+  const cache = CacheService.getScriptCache();
+  if (!fresh) {
+    const hit = getCachedHtml_(cache);
+    if (hit) return hit;
+  }
+  try {
+    const res = UrlFetchApp.fetch(HTML_URL, { muteHttpExceptions: true, followRedirects: true });
+    const html = res.getResponseCode() === 200 ? res.getContentText('UTF-8') : '';
+    if (isWholeHtml_(html)) {
+      putCachedHtml_(cache, html);
+      return html;
+    }
+  } catch (err) { /* 아래 예비 화면 사용 */ }
+  return HtmlService.createHtmlOutputFromFile('Index').getContent();
+}
+
+/** 화면 파일이 끝까지 온전히 있는지 확인 */
+function isWholeHtml_(html) {
+  return !!html && html.indexOf('google.script.run') > 0 && /<\/script>\s*<\/body>\s*<\/html>\s*$/.test(html);
+}
+
+/* 캐시 한 칸은 100KB까지라 화면을 나눠 저장 (한글은 한 글자 3바이트라 30,000자씩) */
+const HTML_CHUNK = 30000;
+function putCachedHtml_(cache, html) {
+  try {
+    const parts = {};
+    let n = 0;
+    for (let i = 0; i < html.length; i += HTML_CHUNK) parts['html_' + n++] = html.slice(i, i + HTML_CHUNK);
+    parts['html_n'] = String(n);
+    cache.putAll(parts, HTML_CACHE_SECONDS);
+  } catch (err) { /* 저장 못 해도 화면은 그대로 보여 줌 */ }
+}
+function getCachedHtml_(cache) {
+  try {
+    const n = Number(cache.get('html_n') || 0);
+    if (!n) return '';
+    const keys = [];
+    for (let i = 0; i < n; i++) keys.push('html_' + i);
+    const got = cache.getAll(keys);
+    if (keys.some(k => !got[k])) return '';
+    const html = keys.map(k => got[k]).join('');
+    // 잘리거나 섞인 화면은 쓰지 않음 (탭 글자만 보이고 아무것도 안 눌리는 문제 방지)
+    return isWholeHtml_(html) ? html : '';
+  } catch (err) { return ''; }
 }
 
 /** 처음 한 번 편집기에서 실행: 권한 승인 + 드라이브 폴더/시트 생성 */
@@ -36,6 +92,8 @@ function setup() {
   const { folder, ss } = ensureStorage_();
   Logger.log('저장 폴더: ' + folder.getUrl());
   Logger.log('기록 시트: ' + ss.getUrl());
+  const code = UrlFetchApp.fetch(HTML_URL, { muteHttpExceptions: true }).getResponseCode();
+  Logger.log(code === 200 ? '화면: GitHub에서 불러옴' : '화면: GitHub 읽기 실패(' + code + ') → 프로젝트 안 Index 파일 사용');
 }
 
 /** 화면을 열 때 환자 목록(지난 기록 포함)과 저장 위치를 돌려줌 */
@@ -129,6 +187,143 @@ function upsertVisit_(record, final) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* =====================================================================
+ *  환자카드 — 방문기록 시트를 환자(이름+생년월일)별로 묶어 날짜순으로 보여 줌
+ *  방문예정 — 방문해야 할 분 목록. 같은 기록부의 '방문예정' 탭에 한 줄씩
+ * ===================================================================== */
+const CARD_INFO = ['장기요양등급', '장기요양기관명', '장애정도', '장애유형', '동거형태', '주돌봄자', '소득구분'];
+const TODO_SHEET = '방문예정';
+const TODO_HEADERS = ['기록ID', '등록시각', '작성자', '이름', '생년월일', '예정일', '내용', '상태', '완료시각', '구글계정'];
+const TODO_OPEN = '예정';
+const TODO_DONE = '완료';
+
+/** [환자카드] 탭: 환자별 방문 기록 (최근 방문이 위) */
+function getPatientCards() {
+  const { ss } = ensureStorage_();
+  const sh = getSheet_(ss);
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return { cards: [] };
+  const values = sh.getRange(1, 1, lastRow, sh.getLastColumn()).getDisplayValues();
+  const header = values[0];
+  const at = (row, name) => header.indexOf(name) >= 0 ? String(row[header.indexOf(name)] || '').trim() : '';
+
+  // 생년월일이 빠진 줄은, 같은 이름의 생년월일이 하나뿐이면 그 분으로 묶음
+  const births = {};
+  for (let r = 1; r < values.length; r++) {
+    const name = at(values[r], '환자명'), birth = at(values[r], '생년월일');
+    if (!name) continue;
+    births[name] = births[name] || [];
+    if (birth && births[name].indexOf(birth) < 0) births[name].push(birth);
+  }
+
+  const cards = {};
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    const name = at(row, '환자명');
+    if (!name) continue;
+    let birth = at(row, '생년월일');
+    if (!birth && births[name].length === 1) birth = births[name][0];
+    const key = name + '|' + birth;
+    const card = cards[key] || (cards[key] = { key: key, name: name, birth: birth, info: {}, visits: [] });
+    CARD_INFO.forEach(h => { const v = at(row, h); if (v) card.info[h] = v; }); // 아래 줄일수록 최신
+    card.visits.push({
+      row: r, date: at(row, '방문일'), type: at(row, '방문유형'), author: at(row, '작성자'),
+      status: at(row, STATUS_HEADER), crisis: at(row, '위기신호'), needs: at(row, '확인된 욕구'),
+      memo: at(row, '상담내용'), plan: at(row, '향후 계획'), doc: at(row, LINK_HEADER)
+    });
+  }
+  const list = Object.keys(cards).map(k => cards[k]);
+  list.forEach(c => c.visits.sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.row - a.row));
+  list.sort((a, b) => ((b.visits[0] || {}).date || '').localeCompare((a.visits[0] || {}).date || ''));
+  return { cards: list };
+}
+
+/** [방문예정] 탭: 전체 목록 */
+function getTodos() {
+  const { ss } = ensureStorage_();
+  const sh = getTodoSheet_(ss);
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return { todos: [] };
+  const values = sh.getRange(1, 1, lastRow, sh.getLastColumn()).getDisplayValues();
+  const header = values[0];
+  const todos = values.slice(1).filter(row => row[0]).map(row => {
+    const at = name => header.indexOf(name) >= 0 ? String(row[header.indexOf(name)] || '') : '';
+    return {
+      id: at('기록ID'), created: at('등록시각'), author: at('작성자'), name: at('이름'), birth: at('생년월일'),
+      due: at('예정일'), note: at('내용'), done: at('상태') === TODO_DONE, doneAt: at('완료시각')
+    };
+  });
+  return { todos: todos };
+}
+
+/** 방문예정 추가·수정·완료 (같은 기록ID는 같은 줄을 덮어씀) */
+function saveTodo(t) {
+  if (!t || !t.id || !String(t.name || '').trim()) throw new Error('방문할 분 이름을 입력해 주세요.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const { ss } = ensureStorage_();
+    const sh = getTodoSheet_(ss);
+    const header = ensureHeaders_(sh, TODO_HEADERS);
+    const rowNo = findRowById_(sh, t.id);
+    const prev = rowNo ? sh.getRange(rowNo, 1, 1, header.length).getDisplayValues()[0] : [];
+    const old = name => header.indexOf(name) >= 0 ? (prev[header.indexOf(name)] || '') : '';
+    const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    const data = {
+      '기록ID': t.id,
+      '등록시각': old('등록시각') || now,
+      '작성자': t.author || '',
+      '이름': String(t.name).trim(),
+      '생년월일': t.birth || '',
+      '예정일': t.due || '',
+      '내용': t.note || '',
+      '상태': t.done ? TODO_DONE : TODO_OPEN,
+      '완료시각': t.done ? (old('완료시각') || now) : '',
+      '구글계정': Session.getActiveUser().getEmail() || old('구글계정')
+    };
+    const row = header.map(h => safeCell_(data[h]));
+    sh.getRange(rowNo || sh.getLastRow() + 1, 1, 1, row.length).setNumberFormat('@').setValues([row]);
+    return { ok: true, todo: { id: t.id, created: data['등록시각'], author: data['작성자'], name: data['이름'], birth: data['생년월일'],
+      due: data['예정일'], note: data['내용'], done: !!t.done, doneAt: data['완료시각'] } };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 방문예정 삭제 */
+function deleteTodo(id) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const { ss } = ensureStorage_();
+    const sh = getTodoSheet_(ss);
+    const rowNo = findRowById_(sh, id);
+    if (rowNo) sh.deleteRow(rowNo);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getTodoSheet_(ss) {
+  let sh = ss.getSheetByName(TODO_SHEET);
+  if (!sh) sh = ss.insertSheet(TODO_SHEET);
+  if (sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, TODO_HEADERS.length).setValues([TODO_HEADERS]);
+    sh.setFrozenRows(1);
+    sh.getRange('1:1').setFontWeight('bold').setBackground('#e8f0fe');
+  }
+  return sh;
+}
+
+/** 첫 열(기록ID)에서 같은 ID의 줄 번호 (없으면 0) */
+function findRowById_(sh, id) {
+  if (!id || sh.getLastRow() < 2) return 0;
+  const found = sh.getRange(2, 1, sh.getLastRow() - 1, 1)
+    .createTextFinder(String(id)).matchEntireCell(true).findNext();
+  return found ? found.getRow() : 0;
 }
 
 /* ---------------- 내부 함수 ---------------- */

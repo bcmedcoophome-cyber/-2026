@@ -52,6 +52,11 @@
     width: 100%; font: inherit; font-size: 22px; color: var(--ink); background: var(--bg);
     border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; min-height: 60px; }
   textarea { min-height: 140px; resize: vertical; line-height: 1.5; }
+  /* 아이폰 사파리: 날짜·시간 칸이 기본 최소 너비 때문에 틀 밖으로 나가는 것 방지 */
+  input[type=date], input[type=time] { -webkit-appearance: none; appearance: none; display: block;
+    min-width: 0; max-width: 100%; width: 100%; box-sizing: border-box; text-align: left; }
+  input[type=date]::-webkit-date-and-time-value, input[type=time]::-webkit-date-and-time-value { text-align: left; }
+  section.card { min-width: 0; overflow: hidden; }
   input:focus, textarea:focus { outline: 3px solid var(--brand); border-color: transparent; }
 
   .chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
@@ -186,7 +191,7 @@ const TEAMS = ['따품안', '임종하면', '해바라기', '햇살동행'];
  *  showIf: 다른 항목이 특정 값일 때만 보임
  * ===================================================================== */
 const KIND = { name: '방문기록지', filePrefix: '생애말기활동가기록지', docTitle: '생애말기활동가기록지' };
-const UI_VERSION = '2026-10-29'; // 화면 버전 (GitHub에서 고치면 올림)
+const UI_VERSION = '2026-10-29b'; // 화면 버전 (GitHub에서 고치면 올림)
 const FORM = [
   { key: 'date', label: '방문날짜', type: 'date', required: true },
   { key: 'time', label: '활동 시간', type: 'timerange', required: true, hint: '시작한 시간과 끝난 시간을 넣어 주세요' },

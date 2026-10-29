@@ -74,6 +74,7 @@
   .btn.primary { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
   .btn.warn { background: var(--danger); color: #fff; border-color: var(--danger); }
   .btn.small { min-height: 52px; font-size: 18px; padding: 8px 14px; }
+  .btn[data-days] { flex: 1; }
   .btn:disabled { opacity: .5; }
 
   footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 2px solid var(--line);
@@ -185,7 +186,7 @@ const TEAMS = ['따품안', '임종하면', '해바라기', '햇살동행'];
  *  showIf: 다른 항목이 특정 값일 때만 보임
  * ===================================================================== */
 const KIND = { name: '방문기록지', filePrefix: '생애말기활동가기록지', docTitle: '생애말기활동가기록지' };
-const UI_VERSION = '2026-10-27'; // 화면 버전 (GitHub에서 고치면 올림)
+const UI_VERSION = '2026-10-29'; // 화면 버전 (GitHub에서 고치면 올림)
 const FORM = [
   { key: 'date', label: '방문날짜', type: 'date', required: true },
   { key: 'time', label: '활동 시간', type: 'timerange', required: true, hint: '시작한 시간과 끝난 시간을 넣어 주세요' },
@@ -194,10 +195,14 @@ const FORM = [
     options: ['대상자 본인', '자녀', '요양보호사', '배우자', '기타'] },
   { key: 'mood', label: '대상자 기분·상태', type: 'multi', required: true, hint: '여러 개 눌러도 됩니다',
     options: ['활발', '우울', '무기력', '수면', '통증', '기타'] },
+  { key: 'selfCare', label: '스스로 가능한 것', type: 'multi', hint: '어르신이 혼자 할 수 있는 것을 모두 눌러 주세요',
+    options: ['식사', '세면', '화장실', '이동', '수면·휴식'] },
+  { key: 'discomfort', label: '가장 불편한 것', type: 'text', placeholder: '예: 허리 통증, 잠을 못 주무심' },
   { key: 'notice', label: '필수 전달사항', type: 'multi', required: true, hint: '누구에게 전달할까요? 여러 개 눌러도 됩니다',
     options: ['의료진', '사회복지사', '대상자 가족', '없음'], exclusive: '없음', danger: true },
   { key: 'noticeNote', label: '전달 내용', type: 'memo', required: true, showIf: () => hasNotice(),
     hint: '전달할 내용을 적어 주세요' },
+  { key: 'nextVisit', label: '다음 방문 날짜', type: 'date', quick: [7, 14] },
   { key: 'memo', label: '활동 내용·특이사항', type: 'memo',
     phrases: ['말벗 해드림.', '손 마사지 해드림.', '산책 함께 함.', '가족과 이야기 나눔.', '특이사항 없음.'] }
 ];
@@ -218,6 +223,10 @@ let serverElders = [];
 function today() {
   const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 10);
+}
+function addDays(ymd, n) {
+  const d = new Date(ymd + 'T12:00:00'); d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 function uid() { return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -277,7 +286,11 @@ function render() {
     if (!b) return;
     state.elder = b.dataset.elder; paint(); saveDraft();
   });
-  $('todayBtn').addEventListener('click', () => { state.date = today(); paint(); saveDraft(); });
+  form.querySelectorAll('[data-days]').forEach(b => b.addEventListener('click', () => {
+    const days = +b.dataset.days;
+    state[b.dataset.for] = days ? addDays(state.date || today(), days) : today();
+    paint(); saveDraft();
+  }));
   form.querySelectorAll('input[type=time]').forEach(el => el.addEventListener('change', onInput));
   form.querySelectorAll('[data-now]').forEach(b => b.addEventListener('click', () => {
     const d = new Date();
@@ -304,8 +317,12 @@ function renderField(f) {
     return row('timeStart', '시작') + row('timeEnd', '끝') + `<p class="time-calc" id="timeCalc"></p>`;
   }
   if (f.type === 'date') {
-    return `<div style="display:flex;gap:10px"><input id="${id}" type="date" data-key="${f.key}" aria-label="${esc(f.label)}" style="flex:1">
-      <button type="button" class="btn small" id="todayBtn">오늘</button></div>`;
+    // 방문날짜: [오늘] 버튼 / 다음 방문 날짜: 방문날짜 기준 [1주 뒤] [2주 뒤] 버튼
+    const btns = f.quick
+      ? f.quick.map(d => `<button type="button" class="btn small" data-days="${d}" data-for="${f.key}">${d % 7 ? d + '일' : d / 7 + '주'} 뒤</button>`).join('')
+      : `<button type="button" class="btn small" data-days="0" data-for="${f.key}">오늘</button>`;
+    return `<input id="${id}" type="date" data-key="${f.key}" aria-label="${esc(f.label)}" style="width:100%">
+      <div style="display:flex;gap:10px;margin-top:10px">${btns}</div>`;
   }
   return `<input id="${id}" type="text" data-key="${f.key}" aria-label="${esc(f.label)}"${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ''}>
     ${f.key === 'elder' ? '<p class="hint" id="elderHint" style="margin:10px 0 6px" hidden>전에 만난 어르신 (누르면 이름이 들어갑니다)</p><div class="chips" id="elderChips"></div>' : ''}`;

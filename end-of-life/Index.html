@@ -52,11 +52,16 @@
     width: 100%; font: inherit; font-size: 22px; color: var(--ink); background: var(--bg);
     border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; min-height: 60px; }
   textarea { min-height: 140px; resize: vertical; line-height: 1.5; }
-  /* 아이폰 사파리: 날짜·시간 칸이 기본 최소 너비 때문에 틀 밖으로 나가는 것 방지 */
-  input[type=date], input[type=time] { -webkit-appearance: none; appearance: none; display: block;
-    min-width: 0; max-width: 100%; width: 100%; box-sizing: border-box; text-align: left; }
-  input[type=date]::-webkit-date-and-time-value, input[type=time]::-webkit-date-and-time-value { text-align: left; }
-  section.card { min-width: 0; overflow: hidden; }
+  /* 날짜·시간: 겉에는 틀에 맞춘 글자만 보이고, 투명한 진짜 입력칸을 위에 덮어 누르면 기본 달력/시계가 뜸
+     (아이폰 사파리 날짜 칸이 틀 밖으로 나가는 문제를 기기와 상관없이 막음) */
+  .pick { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; min-height: 60px;
+    padding: 0 14px; border: 2px solid var(--line); border-radius: 12px; background: var(--bg); font-size: 22px; overflow: hidden; }
+  .pick .pick-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pick .pick-text.empty { color: var(--muted); font-size: 19px; }
+  .pick .pick-icon { flex: none; font-size: 22px; }
+  .pick input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0;
+    opacity: 0; -webkit-appearance: none; appearance: none; font-size: 16px; cursor: pointer; }
+  .pick:focus-within { outline: 3px solid var(--brand); border-color: transparent; }
   input:focus, textarea:focus { outline: 3px solid var(--brand); border-color: transparent; }
 
   .chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
@@ -103,11 +108,10 @@
   .saved-item .acts .btn { flex: 1; }
   #savedList { max-height: 60vh; overflow: auto; }
   #savedList:empty::before { content: "저장된 기록이 없습니다."; display: block; padding: 16px; color: var(--muted); }
-  .time-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .time-row span { width: 44px; font-weight: 700; flex: none; }
-  .time-row input { flex: 1; min-width: 0; }
-  input[type=time] { font: inherit; font-size: 22px; color: var(--ink); background: var(--bg);
-    border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; min-height: 60px; }
+  .time-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 12px; }
+  .time-row > .t-label { width: 100%; font-weight: 700; font-size: 18px; }
+  .time-row .pick { flex: 1; padding: 0 10px; }
+  .time-row .btn { padding: 8px 10px; flex: none; }
   .time-calc { margin: 4px 0 0; font-size: 20px; font-weight: 700; color: var(--ok); }
   .time-calc.bad { color: var(--danger); }
   [hidden] { display: none !important; }
@@ -191,7 +195,7 @@ const TEAMS = ['따품안', '임종하면', '해바라기', '햇살동행'];
  *  showIf: 다른 항목이 특정 값일 때만 보임
  * ===================================================================== */
 const KIND = { name: '방문기록지', filePrefix: '생애말기활동가기록지', docTitle: '생애말기활동가기록지' };
-const UI_VERSION = '2026-10-29b'; // 화면 버전 (GitHub에서 고치면 올림)
+const UI_VERSION = '2026-10-29c'; // 화면 버전 (GitHub에서 고치면 올림)
 const FORM = [
   { key: 'date', label: '방문날짜', type: 'date', required: true },
   { key: 'time', label: '활동 시간', type: 'timerange', required: true, hint: '시작한 시간과 끝난 시간을 넣어 주세요' },
@@ -296,7 +300,7 @@ function render() {
     state[b.dataset.for] = days ? addDays(state.date || today(), days) : today();
     paint(); saveDraft();
   }));
-  form.querySelectorAll('input[type=time]').forEach(el => el.addEventListener('change', onInput));
+  form.querySelectorAll('.pick input').forEach(el => el.addEventListener('change', onInput));
   form.querySelectorAll('[data-now]').forEach(b => b.addEventListener('click', () => {
     const d = new Date();
     state[b.dataset.now] = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
@@ -304,6 +308,27 @@ function render() {
   }));
 }
 
+function pickBox(key, type, label) {
+  return `<label class="pick"><span class="pick-text empty" id="t-${key}"></span>${type === 'date' ? '<span class="pick-icon">📅</span>' : ''}
+    <input id="f-${key}" type="${type}" data-key="${key}" aria-label="${esc(label)}"></label>`;
+}
+const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+function pickText(type, v) {
+  if (!v) return type === 'date' ? '눌러서 날짜 고르기' : '누르기';
+  if (type === 'date') {
+    const d = new Date(v + 'T12:00:00');
+    return isNaN(d) ? v : `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}. (${WEEK[d.getDay()]})`;
+  }
+  const m = /^(\d\d):(\d\d)/.exec(v); if (!m) return v;
+  const h = +m[1];
+  return `${h < 12 ? '오전' : '오후'} ${h % 12 || 12}:${m[2]}`;
+}
+function paintPick(key, type) {
+  const el = $('f-' + key), t = $('t-' + key), v = state[key] || '';
+  if (el.value !== v) el.value = v;
+  t.textContent = pickText(type, v);
+  t.classList.toggle('empty', !v);
+}
 function renderField(f) {
   const id = 'f-' + f.key;
   if (f.type === 'single' || f.type === 'multi') {
@@ -316,8 +341,8 @@ function renderField(f) {
       ${f.phrases ? `<div class="phrases">${f.phrases.map(p => `<button type="button" class="phrase" data-key="${f.key}" data-val="${esc(p)}">+ ${esc(p)}</button>`).join('')}</div>` : ''}`;
   }
   if (f.type === 'timerange') {
-    const row = (k, name) => `<div class="time-row"><span>${name}</span>
-      <input id="f-${k}" type="time" data-key="${k}" aria-label="${f.label} ${name}">
+    const row = (k, name) => `<div class="time-row"><span class="t-label">${name} 시간</span>
+      ${pickBox(k, 'time', f.label + ' ' + name)}
       <button type="button" class="btn small" data-now="${k}">지금</button></div>`;
     return row('timeStart', '시작') + row('timeEnd', '끝') + `<p class="time-calc" id="timeCalc"></p>`;
   }
@@ -326,7 +351,7 @@ function renderField(f) {
     const btns = f.quick
       ? f.quick.map(d => `<button type="button" class="btn small" data-days="${d}" data-for="${f.key}">${d % 7 ? d + '일' : d / 7 + '주'} 뒤</button>`).join('')
       : `<button type="button" class="btn small" data-days="0" data-for="${f.key}">오늘</button>`;
-    return `<input id="${id}" type="date" data-key="${f.key}" aria-label="${esc(f.label)}" style="width:100%">
+    return `${pickBox(f.key, 'date', f.label)}
       <div style="display:flex;gap:10px;margin-top:10px">${btns}</div>`;
   }
   return `<input id="${id}" type="text" data-key="${f.key}" aria-label="${esc(f.label)}"${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ''}>
@@ -338,8 +363,10 @@ function paint() {
   FORM.forEach(f => {
     const v = state[f.key];
     if (f.type === 'timerange') {
-      ['timeStart', 'timeEnd'].forEach(k => { const el = $('f-' + k); if (el.value !== (state[k] || '')) el.value = state[k] || ''; });
+      ['timeStart', 'timeEnd'].forEach(k => paintPick(k, 'time'));
       paintTimeCalc();
+    } else if (f.type === 'date') {
+      paintPick(f.key, 'date');
     } else if (f.type === 'single' || f.type === 'multi') {
       const sel = f.type === 'multi' ? (v || []) : (v ? [v] : []);
       document.querySelectorAll(`.chip[data-key="${f.key}"]`).forEach(b => b.setAttribute('aria-pressed', sel.includes(b.dataset.val)));
@@ -387,6 +414,7 @@ function onChip(e) {
 function onInput(e) {
   const key = e.target.dataset.key;
   state[key] = e.target.value;
+  if (e.target.closest('.pick')) paintPick(key, e.target.type);
   if (key === 'timeStart' || key === 'timeEnd') { calcTime(); paintTimeCalc(); }
   updateProgress(); saveDraft();
 }

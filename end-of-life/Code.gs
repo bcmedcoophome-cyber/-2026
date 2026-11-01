@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '생애말기 활동기록';
-const APP_VERSION = '2026-10-25c'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
+const APP_VERSION = '2026-11-01'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub의 이 앱 전용 브랜치 — main은 건드리지 않음)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/claude/end-of-life-record/end-of-life/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -25,7 +25,32 @@ const FOLDER_NAME = '생애말기활동가기록지'; // TARGET_FOLDER_ID를 비
 const SHEET_FILE_NAME = '생애말기활동가 기록부';
 const DEFAULT_KIND = '방문기록지'; // 기록 종류 = 시트 탭 이름 (항목 전체)
 const LIST_SHEET = '전체목록';     // 맨 앞 탭: 모든 기록을 한 줄씩 (기록지 링크 포함)
-const LIST_HEADERS = ['기록ID', '전송시각', '기록종류', '방문날짜', '어르신 이름', '활동가', '팀', '상태', '알림', '기록지'];
+const LIST_HEADERS = ['기록ID', '전송시각', '기록종류', '방문날짜', '어르신 이름', '활동가', '팀', '상태', '중요도', '중요 키워드', '알림', '기록지'];
+
+/* ---------- 중요도: 기록 내용에서 키워드를 찾아 '높음/보통'으로 표시 ----------
+ * 키워드는 시트의 「중요키워드」 탭에서 직접 고칠 수 있습니다(처음 저장할 때 아래 기본값으로 만들어짐).
+ * 키워드를 고치면 다음 저장 때 지난 기록까지 모두 다시 판정합니다. */
+const KEYWORD_SHEET = '중요키워드';
+const FOCUS_SHEET = '중요기록';
+const LEVEL_HEADER = '중요도';
+const KEYWORD_HEADER = '중요 키워드';
+const LEVELS = ['높음', '보통']; // 앞쪽이 더 중요
+const DEFAULT_KEYWORDS = [
+  ['높음', '자살', '위기'], ['높음', '죽고 싶', '위기'], ['높음', '학대', '위기'], ['높음', '방임', '위기'],
+  ['높음', '낙상', '안전'], ['높음', '넘어', '안전'], ['높음', '호흡곤란', '응급'], ['높음', '숨이 차', '응급'],
+  ['높음', '의식', '응급'], ['높음', '응급', '응급'], ['높음', '출혈', '응급'], ['높음', '욕창', '건강'],
+  ['높음', '식사 못', '건강'], ['높음', '못 드심', '건강'], ['높음', '탈수', '건강'], ['높음', '돌봄 공백', '돌봄'],
+  ['높음', '임종', '돌봄'],
+  ['보통', '통증', '건강'], ['보통', '아프', '건강'], ['보통', '우울', '정서'], ['보통', '무기력', '정서'],
+  ['보통', '불안', '정서'], ['보통', '외로', '정서'], ['보통', '불면', '수면'], ['보통', '잠을 못', '수면'],
+  ['보통', '식욕', '건강'], ['보통', '변비', '건강'], ['보통', '부종', '건강'], ['보통', '갈등', '가족'],
+  ['보통', '의료진', '필수 전달사항'], ['보통', '사회복지사', '필수 전달사항'], ['보통', '대상자 가족', '필수 전달사항']
+];
+// 키워드를 찾지 않는 칸 (이름·날짜·시간 등)
+const NO_SCAN = ['기록ID', '전송시각', '기록종류', '활동가', '팀', '구글계정', '상태', '기록지', '방문날짜', '어르신 이름',
+  '시작 시간', '끝 시간', '활동 시간', '다음 방문 날짜', LEVEL_HEADER, KEYWORD_HEADER];
+const PROP_KW_HASH = 'EOL_KW_HASH';
+const PROP_VIEW = 'EOL_VIEW';
 const BASE_HEADERS = ['기록ID', '전송시각', '활동가', '팀', '구글계정', '상태'];
 const STATUS_HEADER = '상태';
 const STATUS_DRAFT = '임시저장';
@@ -120,6 +145,10 @@ function upsertRecord_(record, final) {
     const docUrl = final ? createDoc_(folder, record) : '';
     const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
     const status = final ? STATUS_SENT : STATUS_DRAFT;
+    const keywords = loadKeywords_(ss);
+    const texts = allItems_(record).filter(it => NO_SCAN.indexOf(it.label) < 0).map(it => it.value)
+      .concat(record.alerts || []);
+    const pr = judge_(texts, keywords);
 
     // 1) 기록 종류별 탭: 항목 전체
     const data = {};
@@ -132,6 +161,8 @@ function upsertRecord_(record, final) {
     allItems_(record).forEach(it => { data[it.label] = it.value || ''; });
     data['방문날짜'] = record.meta.date; // 문서 이름·폴더와 항상 같게
     data['어르신 이름'] = record.meta.elder;
+    data[LEVEL_HEADER] = pr.level;
+    data[KEYWORD_HEADER] = pr.words;
     data[LINK_HEADER] = docUrl;
     writeRow_(sh, data);
 
@@ -140,8 +171,12 @@ function upsertRecord_(record, final) {
       '기록ID': record.id, '전송시각': now, '기록종류': kind,
       '방문날짜': record.meta.date, '어르신 이름': record.meta.elder,
       '활동가': record.author || '', '팀': record.team || '', '상태': status,
+      '중요도': pr.level, '중요 키워드': pr.words,
       '알림': (record.alerts || []).filter(Boolean).join(' / '), '기록지': docUrl
     });
+    // 키워드가 바뀌었으면 지난 기록도 다시 판정, 색 표시·중요기록 탭 맞추기
+    refreshPriorityIfChanged_(ss, keywords);
+    ensureViews_(ss, list);
     return { ok: true, status: status };
   } finally {
     lock.releaseLock();
@@ -149,6 +184,115 @@ function upsertRecord_(record, final) {
 }
 
 /* ---------------- 내부 함수 ---------------- */
+
+/** 「중요키워드」 탭을 읽음 (없으면 기본값으로 만듦) → [{ level, word }] */
+function loadKeywords_(ss) {
+  let sh = ss.getSheetByName(KEYWORD_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(KEYWORD_SHEET);
+    const rows = [['중요도', '키워드', '분류(메모)']].concat(DEFAULT_KEYWORDS);
+    const r = sh.getRange(1, 1, rows.length, 3);
+    r.setNumberFormat('@');
+    r.setValues(rows);
+    const head = sh.getRange(1, 1, 1, 3);
+    head.setFontWeight('bold');
+    head.setBackground('#e8f0fe');
+    sh.setFrozenRows(1);
+    sh.getRange(1, 5, 4, 1).setValues([['사용법'], ['· 중요도 칸에는 높음 또는 보통만 적어 주세요.'],
+      ['· 키워드가 기록 내용 어디에든 들어 있으면 그 중요도로 표시됩니다.'], ['· 고치면 다음 기록을 저장할 때 지난 기록까지 다시 판정합니다.']]);
+  }
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, 2).getDisplayValues()
+    .map(r => ({ level: String(r[0]).trim(), word: String(r[1]).trim() }))
+    .filter(k => k.word && LEVELS.indexOf(k.level) >= 0);
+}
+
+/** 글들에서 키워드를 찾아 { level: '높음'|'보통'|'', words: '통증, 우울' } */
+function judge_(texts, keywords) {
+  const text = texts.filter(Boolean).join(' \n ').toLowerCase();
+  let best = LEVELS.length;
+  const found = [];
+  keywords.forEach(k => {
+    if (text.indexOf(k.word.toLowerCase()) < 0) return;
+    if (found.indexOf(k.word) < 0) found.push(k.word);
+    best = Math.min(best, LEVELS.indexOf(k.level));
+  });
+  return { level: best < LEVELS.length ? LEVELS[best] : '', words: found.join(', ') };
+}
+
+/** 키워드 목록이 바뀌었으면 모든 기록의 중요도를 다시 계산 */
+function refreshPriorityIfChanged_(ss, keywords) {
+  const props = PropertiesService.getScriptProperties();
+  const hash = keywords.map(k => k.level + ':' + k.word).join('|');
+  if (props.getProperty(PROP_KW_HASH) === hash) return;
+  const byId = {};
+  ss.getSheets().forEach(sh => {
+    const name = sh.getName();
+    if (name === LIST_SHEET || name === KEYWORD_SHEET || name === FOCUS_SHEET || sh.getLastRow() < 2) return;
+    const header = ensureHeaders_(sh, [LEVEL_HEADER, KEYWORD_HEADER]);
+    const values = sh.getRange(2, 1, sh.getLastRow() - 1, header.length).getDisplayValues();
+    const li = header.indexOf(LEVEL_HEADER), ki = header.indexOf(KEYWORD_HEADER);
+    const out = values.map(row => {
+      const pr = judge_(row.filter((v, i) => header[i] && NO_SCAN.indexOf(header[i]) < 0), keywords);
+      byId[row[0]] = pr;
+      return pr;
+    });
+    writeColumn_(sh, li + 1, out.map(p => p.level));
+    writeColumn_(sh, ki + 1, out.map(p => p.words));
+  });
+  const list = ss.getSheetByName(LIST_SHEET);
+  if (list && list.getLastRow() > 1) {
+    const header = ensureHeaders_(list, [LEVEL_HEADER, KEYWORD_HEADER, '알림']);
+    const values = list.getRange(2, 1, list.getLastRow() - 1, header.length).getDisplayValues();
+    const ai = header.indexOf('알림');
+    const out = values.map(row => byId[row[0]] || judge_([row[ai]], keywords));
+    writeColumn_(list, header.indexOf(LEVEL_HEADER) + 1, out.map(p => p.level));
+    writeColumn_(list, header.indexOf(KEYWORD_HEADER) + 1, out.map(p => p.words));
+  }
+  props.setProperty(PROP_KW_HASH, hash);
+}
+
+function writeColumn_(sh, col, vals) {
+  if (!vals.length) return;
+  const r = sh.getRange(2, col, vals.length, 1);
+  r.setNumberFormat('@');
+  r.setValues(vals.map(v => [safeCell_(v)]));
+}
+
+/** 「전체목록」 줄 색(높음 빨강·보통 노랑)과 「중요기록」 탭(높음·보통만, 최근 순) */
+function ensureViews_(ss, list) {
+  const header = list.getRange(1, 1, 1, list.getLastColumn()).getValues()[0].map(String);
+  const col = header.indexOf(LEVEL_HEADER) + 1;
+  const dateCol = header.indexOf('방문날짜') + 1;
+  if (col < 1) return;
+  const letter = colLetter_(col), dateLetter = colLetter_(dateCol), lastLetter = colLetter_(header.length);
+  const key = [letter, dateLetter, lastLetter].join('|');
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty(PROP_VIEW) === key && ss.getSheetByName(FOCUS_SHEET)) return;
+
+  const whole = list.getRange('A2:' + lastLetter + '2000');
+  list.setConditionalFormatRules([
+    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$' + letter + '2="높음"')
+      .setBackground('#fde2e1').setRanges([whole]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$' + letter + '2="보통"')
+      .setBackground('#fff4cc').setRanges([whole]).build()
+  ]);
+
+  let focus = ss.getSheetByName(FOCUS_SHEET);
+  if (!focus) focus = ss.insertSheet(FOCUS_SHEET, 1);
+  focus.clear();
+  // 수식은 앱이 만든 고정 문장(사용자 입력 아님)
+  focus.getRange('A1').setFormula('=IFERROR(QUERY(' + LIST_SHEET + '!A:' + lastLetter + ',"select * where ' + letter +
+    " = '높음' or " + letter + " = '보통' order by " + letter + ' asc, ' + dateLetter + ' desc",1),"아직 중요 기록이 없습니다")');
+  props.setProperty(PROP_VIEW, key);
+}
+
+function colLetter_(n) {
+  let s = '';
+  while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
 
 /** 기록ID로 줄 찾기 → { row, get(열이름) } 또는 null */
 function findRow_(sh, id) {
@@ -173,7 +317,7 @@ function writeRow_(sh, data) {
 
 function kindOf_(record) {
   const k = clean_(record.kind).slice(0, 40) || DEFAULT_KIND;
-  return k === LIST_SHEET ? DEFAULT_KIND : k;
+  return [LIST_SHEET, KEYWORD_SHEET, FOCUS_SHEET].indexOf(k) >= 0 ? DEFAULT_KIND : k;
 }
 
 /** 섹션·항목을 한 줄로 펼침 (label 없는 것은 버림) */

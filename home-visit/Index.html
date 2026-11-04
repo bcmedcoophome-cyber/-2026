@@ -73,6 +73,14 @@
     padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); z-index: 10; }
   footer .inner { max-width: 720px; margin: 0 auto; display: flex; gap: 8px; }
   footer .inner .btn { flex: 1; }
+  /* 저장 버튼 상태 표시 */
+  #saveBtn.saving { opacity: .7; }
+  #saveBtn.saved { background: var(--ok); border-color: var(--ok); color: #fff; }
+  #saveBtn.savefail { background: var(--danger); border-color: var(--danger); color: #fff; }
+  #toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 20;
+    max-width: calc(100% - 32px); padding: 10px 16px; border-radius: 12px; font-size: 15px; font-weight: 700; color: #fff;
+    background: var(--ok); box-shadow: 0 4px 16px rgba(0,0,0,.2); text-align: center; }
+  #toast.fail { background: var(--danger); }
   footer .btn.primary { flex: 1.6; }
   .saved-item { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
   .saved-item .who { flex: 1; min-width: 0; }
@@ -246,6 +254,7 @@
   <div id="cState">서명까지 받은 뒤 [동의서 전송]을 누르면 PDF로 드라이브에 저장됩니다</div>
 </footer>
 
+<div id="toast" hidden></div>
 <footer id="visitFooter">
   <div class="inner">
     <button class="btn" type="button" id="resetBtn">NEW</button>
@@ -339,7 +348,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-11-04'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-11-04c'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -638,9 +647,26 @@ function fillPatientList() {
 }
 
 /* ---------- 저장(휴대폰에 보관) ---------- */
+/* 저장 버튼에 눌린 결과를 보여 줌: 저장 중 → ✓ 저장됨(초록) / ✗ 다시 저장(빨강) */
+let saveBtnTimer, toastTimer;
+function setSaveBtn(mode, msg) {
+  const b = $('saveBtn'); if (!b) return;
+  clearTimeout(saveBtnTimer);
+  b.classList.remove('saving', 'saved', 'savefail');
+  b.disabled = mode === 'saving';
+  b.textContent = { saving: '저장 중…', saved: '✓ 저장됨', savefail: '✗ 다시 저장' }[mode] || '저장';
+  if (mode) b.classList.add(mode);
+  if (mode === 'saving') { clearTimeout(toastTimer); $('toast').hidden = true; }
+  if (mode === 'saved' || mode === 'savefail') saveBtnTimer = setTimeout(() => setSaveBtn(''), 4000);
+  if (msg) {
+    const t = $('toast'); t.textContent = msg; t.className = mode === 'savefail' ? 'fail' : ''; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
+  }
+}
+
 function saveCurrent(silent) {
   if (!hasValue(state.patient)) {
-    if (!silent) showError('환자명을 입력해야 저장할 수 있습니다.');
+    if (!silent) { showError('환자명을 입력해야 저장할 수 있습니다.'); setSaveBtn('savefail', '환자명을 먼저 적어 주세요'); }
     return false;
   }
   if (!state._id) state._id = uid();
@@ -652,11 +678,19 @@ function saveCurrent(silent) {
     const who = esc(state.patient);
     if (!IS_GAS) {
       flash('okBanner', `💾 ${who}님 기록을 이 휴대폰에 저장했습니다.`);
+      setSaveBtn('saved', '💾 저장했습니다');
     } else {
       flash('okBanner', `💾 ${who}님 기록을 휴대폰에 저장했습니다. 스프레드시트에 저장하는 중…`, 20000);
+      setSaveBtn('saving');
       callServer('saveDraft', buildRecord())
-        .then(() => flash('okBanner', `💾 ${who}님 기록을 휴대폰과 스프레드시트에 저장했습니다(임시저장). 완료되면 [전송]을 눌러 방문기록지를 만드세요.`))
-        .catch(err => showError(`휴대폰에는 저장했지만 스프레드시트 저장은 실패했습니다(${err && err.message ? err.message : '네트워크'}). 신호가 잡히면 [저장]을 다시 눌러 주세요.`));
+        .then(() => {
+          flash('okBanner', `💾 ${who}님 기록을 휴대폰과 스프레드시트에 저장했습니다(임시저장). 완료되면 [전송]을 눌러 방문기록지를 만드세요.`);
+          setSaveBtn('saved', `💾 ${state.patient || ''}님 기록 저장 완료`);
+        })
+        .catch(err => {
+          showError(`휴대폰에는 저장했지만 스프레드시트 저장은 실패했습니다(${err && err.message ? err.message : '네트워크'}). 신호가 잡히면 [저장]을 다시 눌러 주세요.`);
+          setSaveBtn('savefail', '휴대폰에만 저장됨 · 시트 저장 실패');
+        });
     }
   }
   return true;
@@ -897,7 +931,7 @@ function renderConsent() {
 
   <section class="card"><h2>${esc(F().section.replace(/[\[\]]/g, '').trim())} (본인)</h2><div class="body">
     ${F().intro ? `<p class="note" style="margin:0 0 10px">${esc(F().intro)}</p>` : ''}
-    <div class="chips" style="margin-bottom:12px"><button type="button" class="chip" id="cAllSelf">전체 동의함</button></div>
+    <div class="chips" style="margin-bottom:12px"><button type="button" class="chip" id="cAllSelf" aria-pressed="false">전체 동의함</button></div>
     ${F().self.map(it => `<div class="field"><span class="label">${esc(it.title)} <span class="req">*</span></span>${clauseHtml(it)}${ansChips(it.key)}</div>`).join('')}
     <div id="selfSigBox">${sigHtml('self', '본인 서명')}</div>
   </div></section>
@@ -923,7 +957,12 @@ function renderConsent() {
   f.querySelectorAll('.chip[data-ckey]').forEach(b => b.addEventListener('click', onCChip));
   f.querySelectorAll('input[data-ckey]').forEach(el => el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', onCInput));
   f.querySelectorAll('[data-clear]').forEach(b => b.addEventListener('click', () => { pads[b.dataset.clear].clear(); cstate['sig_' + b.dataset.clear] = ''; cSave(); }));
-  $('cAllSelf').addEventListener('click', () => { F().self.forEach(it => { cstate[it.key] = '동의함'; }); cPaint(); cSave(); });
+  $('cAllSelf').addEventListener('click', () => {
+    // 모두 동의된 상태에서 다시 누르면 전부 풀림
+    const all = F().self.every(it => cstate[it.key] === '동의함');
+    F().self.forEach(it => { cstate[it.key] = all ? '' : '동의함'; });
+    cPaint(); cSave();
+  });
   f.querySelectorAll('.chip[data-form]').forEach(b => b.addEventListener('click', () => {
     if (cstate.form === b.dataset.form) return;
     cstate.form = b.dataset.form; cSave(); renderConsent(); cPaint();
@@ -964,6 +1003,7 @@ function makePad(key) {
 }
 
 function cPaint() {
+  if ($('cAllSelf')) $('cAllSelf').setAttribute('aria-pressed', F().self.every(it => cstate[it.key] === '동의함'));
   document.querySelectorAll('#cform input[data-ckey]').forEach(el => {
     const v = cstate[el.dataset.ckey];
     if (el.type === 'checkbox') el.checked = el.dataset.ckey === 'adminSame' ? v !== false : !!v;

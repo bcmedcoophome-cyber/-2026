@@ -339,7 +339,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-11-01'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-11-04'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -1031,7 +1031,8 @@ function buildConsent() {
 }
 /* ---------- 원본 서식(공단용 3쪽 / 재택의료센터용 4쪽) 위에 내용·서명을 찍어서 이미지로 만듦 ----------
  * 좌표 단위: pt (A4 595×842, 왼쪽 위 기준). 서식 이미지는 2배(1191×1684) 해상도. */
-const FORM_IMG_BASE = 'https://bcmedcoophome-cyber.github.io/-2026/visit/forms/';
+// 주소 안의 '//'를 구글이 설명글로 잘라 버리므로 '/'를 이어 붙여 만듦
+const FORM_IMG_BASE = ['https:', '', 'bcmedcoophome-cyber.github.io', '-2026', 'visit', 'forms', ''].join('/');
 const NHIS_MAP = {
   pages: ['nhis-1.jpg', 'nhis-2.jpg', 'nhis-3.jpg'],
   text: {

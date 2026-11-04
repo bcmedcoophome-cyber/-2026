@@ -339,7 +339,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-11-04'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-11-04b'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -897,7 +897,7 @@ function renderConsent() {
 
   <section class="card"><h2>${esc(F().section.replace(/[\[\]]/g, '').trim())} (본인)</h2><div class="body">
     ${F().intro ? `<p class="note" style="margin:0 0 10px">${esc(F().intro)}</p>` : ''}
-    <div class="chips" style="margin-bottom:12px"><button type="button" class="chip" id="cAllSelf">전체 동의함</button></div>
+    <div class="chips" style="margin-bottom:12px"><button type="button" class="chip" id="cAllSelf" aria-pressed="false">전체 동의함</button></div>
     ${F().self.map(it => `<div class="field"><span class="label">${esc(it.title)} <span class="req">*</span></span>${clauseHtml(it)}${ansChips(it.key)}</div>`).join('')}
     <div id="selfSigBox">${sigHtml('self', '본인 서명')}</div>
   </div></section>
@@ -923,7 +923,12 @@ function renderConsent() {
   f.querySelectorAll('.chip[data-ckey]').forEach(b => b.addEventListener('click', onCChip));
   f.querySelectorAll('input[data-ckey]').forEach(el => el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', onCInput));
   f.querySelectorAll('[data-clear]').forEach(b => b.addEventListener('click', () => { pads[b.dataset.clear].clear(); cstate['sig_' + b.dataset.clear] = ''; cSave(); }));
-  $('cAllSelf').addEventListener('click', () => { F().self.forEach(it => { cstate[it.key] = '동의함'; }); cPaint(); cSave(); });
+  $('cAllSelf').addEventListener('click', () => {
+    // 모두 동의된 상태에서 다시 누르면 전부 풀림
+    const all = F().self.every(it => cstate[it.key] === '동의함');
+    F().self.forEach(it => { cstate[it.key] = all ? '' : '동의함'; });
+    cPaint(); cSave();
+  });
   f.querySelectorAll('.chip[data-form]').forEach(b => b.addEventListener('click', () => {
     if (cstate.form === b.dataset.form) return;
     cstate.form = b.dataset.form; cSave(); renderConsent(); cPaint();
@@ -964,6 +969,7 @@ function makePad(key) {
 }
 
 function cPaint() {
+  if ($('cAllSelf')) $('cAllSelf').setAttribute('aria-pressed', F().self.every(it => cstate[it.key] === '동의함'));
   document.querySelectorAll('#cform input[data-ckey]').forEach(el => {
     const v = cstate[el.dataset.ckey];
     if (el.type === 'checkbox') el.checked = el.dataset.ckey === 'adminSame' ? v !== false : !!v;

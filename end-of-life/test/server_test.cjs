@@ -52,7 +52,7 @@ E.api.saveDraft(rec('x1', { kind: '전체목록' }));
 assert.equal(rows(det).length, 2);
 // getInitData
 const init = E.api.getInitData();
-assert.equal(init.version, '2026-11-21d');
+assert.equal(init.version, '2026-11-21e');
 assert.deepEqual(init.elders, [], '저장된 정보는 화면으로 보내지 않음');
 assert.ok(!('docUrl' in E.api.saveVisit(rec('a1'))), '문서 주소도 보내지 않음');
 // 필수값
@@ -271,9 +271,10 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   sh.cells.push(r2.concat(['남 · 80세', '예전 값', '', '', '']));
   const tok = Q.api.login({ name: '심윤재', pin: '1111' }).token;
   const d = Q.api.myData({ name: '심윤재', token: tok });
-  assert.deepEqual(sh.cells[0].slice(0, 13), NEW, '새 칸 그대로');
+  const NEW2 = ['어르신 이름', '담당 활동가1', '담당 활동가2', '상태', '종결일', '성별', '나이', '장기요양등급', '대화·활동', '사는 곳', '주요 질환·건강', '가족·보호자', '돌봄 상황', '주의할 점', '전달 메모'];
+  assert.deepEqual(sh.cells[0].slice(0, 15), NEW2, '새 칸 구성');
   assert.ok(!sh.cells[0].some(x => /ㆍ/.test(x)), '남는 칸 정리');
-  const row = n => Object.fromEntries(NEW.map((h, i) => [h, sh.cells.find(r => r[0] === n)[i]]));
+  const row = n => Object.fromEntries(sh.cells[0].map((h, i) => [h, sh.cells.find(r => r[0] === n)[i]]));
   assert.equal(row('김상례')['성별'], '여', '성별 칸으로 옮김');
   assert.equal(row('김상례')['사는 곳'], '오정구 ○○로');
   assert.equal(row('김상례')['담당 활동가2'], '심윤재');
@@ -284,5 +285,46 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   assert.equal(d.elders.filter(x => x.name === '김상례').length, 1, '한 번만');
   const snap = JSON.stringify(sh.cells); Q.api.myData({ name: '심윤재', token: tok });
   assert.equal(JSON.stringify(sh.cells), snap, '다시는 안 건드림');
+}
+{
+  // 기초정보추가.csv → 빈 칸만 채우고, 없는 어르신 추가, 파일 순서대로 정렬, 파일 이름 '반영됨'
+  const R = makeEnv(); R.api.setup();
+  R.api.saveVisit(rec('r1', { author: '이명옥' }));
+  const ss = Object.values(R.spreadsheets)[0];
+  const tok = R.api.login({ name: '이명옥', pin: '1111' }).token;
+  R.api.myData({ name: '이명옥', token: tok });          // 기초정보 탭 생성
+  const sh = ss.getSheetByName('어르신기초정보');
+  const H = sh.cells[0];
+  const put = o => sh.cells.push(H.map(h => o[h] || ''));
+  put({ '어르신 이름': '감상례', '담당 활동가1': '이명옥', '사는 곳': '오정구', '성별': '여' });
+  put({ '어르신 이름': '허준녀', '담당 활동가1': '이명옥', '성별': '여', '주의할 점': '원래 값' });
+  put({ '어르신 이름': '김명순(부부)', '담당 활동가1': '김동수' });
+  const f = R.api.putFile('기초정보추가.csv', '﻿어르신 이름,예전 이름,성별,나이,장기요양등급,주요 질환ㆍ건강,주의할 점,대화ㆍ활동\n' +
+    '허준녀,,여,95세,2등급,치매,"와상, 대화불가",전혀불가\n김상례,감상례,여,91세,,"치매, 심부전",,"대화, 활동가능"\n김명순,,여,88세,3등급,치매,,대화가능\n정건우,,남,85세,2등급,"고혈압,협심증",,"대화, 활동가능"\n');
+  const d = R.api.myData({ name: '이명옥', token: tok });
+  const rows = sh.cells.slice(1).filter(r => r[0]);
+  assert.deepEqual(rows.map(r => r[0]), ['허준녀', '김상례', '김명순(부부)', '정건우'], '파일 순서대로, 새 어르신 추가, 괄호 이름 매칭');
+  const H2 = sh.cells[0];
+  const g = (n, h) => sh.cells.find(r => r[0] === n)[H2.indexOf(h)];
+  assert.equal(g('허준녀', '주의할 점'), '원래 값', '이미 있는 값은 그대로');
+  assert.equal(g('허준녀', '나이'), '95세'); assert.equal(g('허준녀', '장기요양등급'), '2등급');
+  assert.equal(g('김상례', '주요 질환·건강'), '치매, 심부전', '점 모양 달라도 같은 칸');
+  assert.equal(g('김상례', '사는 곳'), '오정구'); assert.equal(g('김상례', '대화·활동'), '대화, 활동가능');
+  assert.equal(g('김명순(부부)', '나이'), '88세');
+  assert.equal(g('정건우', '주요 질환·건강'), '고혈압,협심증');
+  assert.match(f.name, /^기초정보추가\(반영됨 .+\)\.csv$/, '파일 이름 바뀜');
+  const e = d.elders.find(x => x.name === '김상례');
+  assert.ok(e.info.some(x => x.label === '대화·활동' && x.value === '대화, 활동가능'));
+  assert.ok(!sh.cells[0].includes('예전 이름'), '예전 이름 칸은 시트에 안 생김');
+  assert.ok(!sh.cells.some(r => r[0] === '감상례'), '감상례 → 김상례로 바뀜');
+  // 기록의 '김명순'과 기초정보의 '김명순(부부)'는 같은 어르신
+  R.api.saveVisit(rec('r2', { author: '김동수', team: '임종하면', meta: { elder: '김명순', date: '2026-11-20' } }));
+  const t2 = R.api.login({ name: '김동수', pin: '1111' }).token;
+  const d2 = R.api.myData({ name: '김동수', token: t2 });
+  assert.equal(d2.elders.length, 1, '김명순 = 김명순(부부)');
+  assert.equal(d2.elders[0].count, 1);
+  // 다시 열어도 다시 반영하지 않음
+  const snap = JSON.stringify(sh.cells); R.api.myData({ name: '이명옥', token: tok });
+  assert.equal(JSON.stringify(sh.cells), snap);
 }
 console.log('서버 시험 모두 통과');

@@ -12,7 +12,10 @@ function makeEnv(opts = {}) {
       id, name, parent, kind: 'folder',
       getId: () => id, getName: () => name, getUrl: () => 'https://drive/folders/' + id,
       getFoldersByName: n => { const l = Object.values(folders).filter(x => x.parent === id && x.name === n); let i = 0; return { hasNext: () => i < l.length, next: () => l[i++] }; },
-      createFolder: n => mkFolder(n, id)
+      createFolder: n => mkFolder(n, id),
+      getFilesByName: n => { const l = Object.values(files).filter(x => x.parent === id && x.name === n && !x.trashed).map(x => ({
+        getBlob: () => ({ getDataAsString: () => x.text || '' }), setName: nn => { x.name = nn; }, getName: () => x.name })); let i = 0;
+        return { hasNext: () => i < l.length, next: () => l[i++] }; }
     };
     folders[id] = f; return f;
   }
@@ -159,6 +162,13 @@ function makeEnv(opts = {}) {
     Session: { getActiveUser: () => ({ getEmail: () => 'bcmedcoophome@gmail.com' }), getScriptTimeZone: () => 'Asia/Seoul' },
     Utilities: { formatDate: (d, tz, f) => '2026-10-25 12:00' + (f.includes('ss') ? ':00' : ''),
       getUuid: () => require('crypto').randomUUID(),
+      parseCsv: t => { const rows = []; let row = [], cur = '', q = false;
+        for (let i = 0; i < t.length; i++) { const c = t[i];
+          if (q) { if (c === '"' && t[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+          else if (c === '"') q = true; else if (c === ',') { row.push(cur); cur = ''; }
+          else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+          else cur += c; }
+        if (cur || row.length) { row.push(cur); rows.push(row); } return rows; },
       computeHmacSha256Signature: (v, k) => Array.from(require('crypto').createHmac('sha256', k).update(v).digest()),
       base64EncodeWebSafe: x => Buffer.from(typeof x === 'string' ? Buffer.from(x) : Buffer.from(x.map(b => b & 255))).toString('base64').replace(/\+/g, '-').replace(/\//g, '_') },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) }
@@ -191,6 +201,7 @@ function makeEnv(opts = {}) {
     });
   }
   ctx.__api.addAccount = (n, t, p) => ctx.__addAcc(n, t, p);
+  ctx.__api.putFile = (name, text) => { const id = 'f' + Math.random(); files[id] = { id, name, text, parent: target.id, kind: 'csv' }; return files[id]; };
   return { fetchCount, api: ctx.__api, files, folders, docs, spreadsheets, props, path, log: ctx._log };
 }
 module.exports = { makeEnv };

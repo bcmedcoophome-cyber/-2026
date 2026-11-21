@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '생애말기 활동기록';
-const APP_VERSION = '2026-11-21c'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
+const APP_VERSION = '2026-11-21d'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub의 이 앱 전용 브랜치 — main은 건드리지 않음)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/claude/end-of-life-record/end-of-life/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -415,27 +415,37 @@ function writeInfoSheet_(sh, rows, extraHeaders) {
 }
 
 /** 예전 칸 구성(담당 활동가 한 칸, 성별·나이 한 칸)이면 내용을 새 칸으로 옮김. 한 번만 */
+// 칸 이름 비교용: 가운데 점(·・ㆍ• 등)·쉼표·띄어쓰기 차이는 무시
+function hkey_(s) { return nfc_(s).replace(/[\s·・ㆍ•‧∙.,，]/g, ''); }
+
 function migrateInfo_(sh) {
   if (sh.getLastColumn() < 1) return;
   const v = sh.getRange(1, 1, Math.max(sh.getLastRow(), 1), sh.getLastColumn()).getDisplayValues();
-  const h = v[0].map(x => String(x).trim());
-  if (h.indexOf('담당 활동가1') >= 0 || (h.indexOf('담당 활동가') < 0 && h.indexOf('성별·나이') < 0)) return;
-  // 사용법 칸(빈 칸 뒤 오른쪽)은 버리고, 아는 칸은 새 자리로, 모르는 칸은 끝에 붙임
+  // 칸 이름의 점 모양이 달라도 같은 칸으로 봄 (예: '성별ㆍ나이' = '성별·나이')
+  const canon = INFO_HEADERS.concat(['담당 활동가', '성별·나이']);
+  const h = v[0].map(x => { const t = String(x).trim(); const c = canon.find(k => hkey_(k) === hkey_(t)); return c || t; });
+  // 사용법 칸(빈 칸 뒤 오른쪽)은 버림
   let end = h.length;
   for (let i = 0; i < h.length; i++) if (!h[i]) { end = i; break; }
-  const known = INFO_HEADERS.concat(['담당 활동가', '성별·나이']);
-  const extra = h.slice(0, end).filter(x => known.indexOf(x) < 0);
-  const rows = v.slice(1).filter(r => String(r[h.indexOf('어르신 이름')] || '').trim()).map(r => {
-    const g = name => { const i = h.indexOf(name); return i >= 0 && i < end ? String(r[i] || '').trim() : ''; };
-    const helpers = g('담당 활동가').split(/[,，/·]+/).map(x => x.trim()).filter(Boolean);
+  const used = h.slice(0, end);
+  const dup = used.some((x, i) => used.indexOf(x) !== i);
+  const raw = v[0].slice(0, end).map(x => String(x).trim());
+  const oddName = raw.some((x, i) => x !== used[i]);   // 점 모양이 다른 칸 이름
+  if (used.indexOf('담당 활동가') < 0 && used.indexOf('성별·나이') < 0 && !dup && !oddName) return; // 이미 새 구성
+  const extra = used.filter((x, i) => canon.indexOf(x) < 0 && used.indexOf(x) === i);
+  const ni = used.indexOf('어르신 이름');
+  const rows = v.slice(1).filter(r => ni >= 0 && String(r[ni] || '').trim()).map(r => {
+    const all = name => used.map((x, i) => x === name ? String(r[i] || '').trim() : '').filter(Boolean);
+    const g = name => all(name)[0] || '';
+    const helpers = all('담당 활동가').join(',').split(/[,，/·]+/).map(x => x.trim()).filter(Boolean);
     const sa = g('성별·나이');
     const sex = (sa.match(/[남여]/) || [''])[0];
     const age = (sa.match(/\d+/) || [''])[0];
     const out = INFO_HEADERS.map(name => {
-      if (name === '담당 활동가1') return helpers[0] || '';
-      if (name === '담당 활동가2') return helpers.slice(1).join(', ');
-      if (name === '성별') return sex || (sa && !age ? sa : '');
-      if (name === '나이') return age ? age + '세' : '';
+      if (name === '담당 활동가1') return g('담당 활동가1') || helpers[0] || '';
+      if (name === '담당 활동가2') return g('담당 활동가2') || helpers.slice(1).join(', ');
+      if (name === '성별') return g('성별') || sex || (sa && !age ? sa : '');
+      if (name === '나이') return g('나이') || (age ? age + '세' : '');
       return g(name);
     });
     return out.concat(extra.map(g));

@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '생애말기 활동기록';
-const APP_VERSION = '2026-11-21d'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
+const APP_VERSION = '2026-11-21e'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub의 이 앱 전용 브랜치 — main은 건드리지 않음)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/claude/end-of-life-record/end-of-life/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -68,7 +68,8 @@ const MAX_FAILS = 5;          // 비밀번호 5번 틀리면
 const LOCK_SECONDS = 15 * 60; // 15분 잠금
 /* ---------- 어르신 기초정보: 사회복지사가 입력 → 담당 활동가에게만 보임 ---------- */
 const INFO_SHEET = '어르신기초정보';
-const INFO_HEADERS = ['어르신 이름', '담당 활동가1', '담당 활동가2', '상태', '종결일', '성별', '나이', '사는 곳', '주요 질환·건강', '가족·보호자', '돌봄 상황', '주의할 점', '전달 메모'];
+const INFO_ADD_FILE = '기초정보추가.csv'; // 이 이름의 파일을 저장 폴더에 두면 빈 칸을 채워 넣고 이름을 '반영됨'으로 바꿈
+const INFO_HEADERS = ['어르신 이름', '담당 활동가1', '담당 활동가2', '상태', '종결일', '성별', '나이', '장기요양등급', '대화·활동', '사는 곳', '주요 질환·건강', '가족·보호자', '돌봄 상황', '주의할 점', '전달 메모'];
 const SPECIAL_SHEETS = () => [LIST_SHEET, KEYWORD_SHEET, FOCUS_SHEET, ACCOUNT_SHEET, INFO_SHEET];
 const PROP_SHEET = 'EOL_SHEET_ID';
 const PROP_FOLDER = 'EOL_FOLDER_ID';
@@ -299,7 +300,7 @@ function upsertRecord_(record, final) {
 // 휴대폰마다 한글을 다른 방식(NFC/NFD)으로 보낼 수 있어 같은 글자로 맞춤
 function nfc_(s) { s = String(s || ''); return s.normalize ? s.normalize('NFC') : s; }
 function normName_(s) { return nfc_(s).replace(/\s+/g, ''); }
-function elderKey_(s) { return nfc_(s).replace(/[\s.]+/g, ''); }
+function elderKey_(s) { return nfc_(s).replace(/\(.*?\)|（.*?）/g, '').replace(/[\s.]+/g, ''); } // '김명순(부부)' = '김명순'
 /** 앱이 만든 기록 탭인지 (1행 첫 칸이 '기록ID'이고 '어르신 이름' 칸이 있음) — 사람이 만든 다른 탭은 건드리지 않음 */
 function isRecordSheet_(sh) {
   if (SPECIAL_SHEETS().indexOf(sh.getName()) >= 0 || sh.getLastRow() < 2 || sh.getLastColumn() < 2) return false;
@@ -374,6 +375,7 @@ function readInfo_(ss) {
   if (!sh) sh = ss.insertSheet(INFO_SHEET);
   if (sh.getLastRow() === 0) writeInfoSheet_(sh, []);
   migrateInfo_(sh);
+  mergeInfoFile_(sh);
   const last = sh.getLastRow();
   if (last < 2) return [];
   const v = sh.getRange(1, 1, last, sh.getLastColumn()).getDisplayValues();
@@ -390,6 +392,46 @@ function readInfo_(ss) {
     fields: h.map((label, i) => ({ label: label, value: String(r[i] || '').trim() }))
       .filter((f, i) => f.label && skip.indexOf(i) < 0 && f.value && !/^사용법|^·/.test(f.label))
   }));
+}
+
+/** 저장 폴더의 '기초정보추가.csv'(1행 칸 이름, 한 어르신 한 줄)를 읽어 빈 칸만 채우고 없는 어르신은 줄 추가 */
+function mergeInfoFile_(sh) {
+  const it = ensureStorage_().folder.getFilesByName(INFO_ADD_FILE);
+  if (!it.hasNext()) return;
+  const file = it.next();
+  const csv = Utilities.parseCsv(file.getBlob().getDataAsString('UTF-8').replace(/^\uFEFF/, ''));
+  if (csv.length < 2) return;
+  const canon = h => INFO_HEADERS.find(k => hkey_(k) === hkey_(h)) || String(h).trim();
+  const addH = csv[0].map(canon);
+  const ai = addH.indexOf('어르신 이름'), oi = addH.indexOf('예전 이름'); // 예전 이름: 시트의 이름을 바꿀 때
+  if (ai < 0) return;
+  const header = ensureHeaders_(sh, addH.filter(h => h && h !== '어르신 이름' && h !== '예전 이름'));
+  const last = sh.getLastRow();
+  const data = last > 1 ? sh.getRange(2, 1, last - 1, header.length).getDisplayValues() : [];
+  const ni = header.indexOf('어르신 이름');
+  csv.slice(1).forEach(r => {
+    const name = String(r[ai] || '').trim();
+    if (!name) return;
+    const old = oi >= 0 ? String(r[oi] || '').trim() : '';
+    let row = (old && data.find(d => elderKey_(d[ni]) === elderKey_(old))) || data.find(d => elderKey_(d[ni]) === elderKey_(name));
+    if (row && old) row[ni] = name; // 이름 고치기 (예: 감상례 → 김상례)
+    if (!row) { row = header.map(() => ''); row[ni] = name; data.push(row); }
+    addH.forEach((h, j) => {
+      const i = header.indexOf(h), v = String(r[j] || '').trim();
+      if (i >= 0 && i !== ni && v && !String(row[i] || '').trim()) row[i] = v; // 빈 칸만
+    });
+  });
+  // 줄 순서: 파일에 적힌 순서대로, 파일에 없는 어르신은 그 뒤에 원래 순서로
+  const order = csv.slice(1).map(r => elderKey_(r[ai])).filter(Boolean);
+  const pos = d => { const k = order.indexOf(elderKey_(d[ni])); return k < 0 ? order.length : k; };
+  const sorted = data.map((d, i) => [d, i]).sort((x, y) => (pos(x[0]) - pos(y[0])) || (x[1] - y[1])).map(x => x[0]);
+  data.length = 0; sorted.forEach(d => data.push(d));
+  if (data.length) {
+    const rg = sh.getRange(2, 1, data.length, header.length);
+    rg.setNumberFormat('@');
+    rg.setValues(data.map(r => r.map(safeCell_)));
+  }
+  file.setName(INFO_ADD_FILE.replace('.csv', '') + '(반영됨 ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') + ').csv');
 }
 
 /** 기초정보 탭을 새 칸 구성으로 다시 씀 (rows는 INFO_HEADERS 순서 + 덧붙인 칸) */

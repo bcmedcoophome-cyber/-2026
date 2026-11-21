@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '생애말기 활동기록';
-const APP_VERSION = '2026-11-21e'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
+const APP_VERSION = '2026-11-21f'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub의 이 앱 전용 브랜치 — main은 건드리지 않음)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/claude/end-of-life-record/end-of-life/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -364,6 +364,16 @@ function accountSheet_(ss) {
       if (names[i][0] && !String(p[0]).trim()) { p[0] = String(100000 + Math.floor(Math.random() * 900000)); changed = true; }
     });
     if (changed) { const r = sh.getRange(2, 3, last - 1, 1); r.setNumberFormat('@'); r.setValues(pins); }
+    // 같은 이름(띄어쓰기·한글 조합 방식만 다른 경우 포함)이 두 줄 이상이면 첫 줄만 남김 — 로그인은 원래 첫 줄로만 됨
+    const rows = sh.getRange(2, 1, last - 1, ACCOUNT_HEADERS.length).getDisplayValues();
+    const seen = {};
+    const keep = rows.filter(r => { const k = normName_(r[0]); if (!k) return true; if (seen[k]) return false; seen[k] = 1; return true; });
+    if (keep.length < rows.length) {
+      const blank = rows.slice(keep.length).map(() => ACCOUNT_HEADERS.map(() => ''));
+      const rg = sh.getRange(2, 1, rows.length, ACCOUNT_HEADERS.length);
+      rg.setNumberFormat('@');
+      rg.setValues(keep.concat(blank));
+    }
   }
   return sh;
 }

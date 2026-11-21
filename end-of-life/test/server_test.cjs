@@ -52,7 +52,7 @@ E.api.saveDraft(rec('x1', { kind: '전체목록' }));
 assert.equal(rows(det).length, 2);
 // getInitData
 const init = E.api.getInitData();
-assert.equal(init.version, '2026-11-21e');
+assert.equal(init.version, '2026-11-21f');
 assert.deepEqual(init.elders, [], '저장된 정보는 화면으로 보내지 않음');
 assert.ok(!('docUrl' in E.api.saveVisit(rec('a1'))), '문서 주소도 보내지 않음');
 // 필수값
@@ -326,5 +326,19 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   // 다시 열어도 다시 반영하지 않음
   const snap = JSON.stringify(sh.cells); R.api.myData({ name: '이명옥', token: tok });
   assert.equal(JSON.stringify(sh.cells), snap);
+}
+{
+  // 활동가계정에 같은 이름이 두 줄(한글 조합 방식만 다름) → 첫 줄만 남김
+  const S = makeEnv(); S.api.setup();
+  S.api.saveVisit(rec('s1', { author: '심윤재' }));
+  const acc = Object.values(S.spreadsheets)[0].getSheetByName('활동가계정');
+  acc.cells.push(['이명옥', '따품안', '111111', 'O', '']);
+  acc.cells.push(['박동옥', '따품안', '333333', 'O', '']);
+  acc.cells.push(['이명옥'.normalize('NFD'), '따품안', '222222', 'O', '']);
+  const t = S.api.login({ name: '이명옥', pin: '111111' });
+  const names = acc.cells.slice(1).map(r => r[0]).filter(Boolean);
+  assert.deepEqual(names.map(n => n.normalize('NFC')), ['심윤재', '이명옥', '박동옥'], '두 번째 이명옥 줄 정리');
+  assert.ok(!acc.cells.some(r => r[2] === '222222'));
+  assert.equal(t.name, '이명옥');
 }
 console.log('서버 시험 모두 통과');

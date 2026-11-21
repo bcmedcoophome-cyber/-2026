@@ -89,12 +89,16 @@ fs.mkdirSync(SHOT, { recursive: true });
   await page.click('.chip[data-key="selfCare"][data-val="수면·휴식"]');
   await page.fill('#f-discomfort', '허리 통증');
   await page.fill('#f-date', '2026-10-29');
+  await page.click('.chip[data-key="supplies"][data-val="돌봄키트"]');
+  await page.click('.chip[data-key="supplies"][data-val="없음"]');
+  assert.equal(await page.getAttribute('.chip[data-key="supplies"][data-val="돌봄키트"]', 'aria-pressed'), 'false', '없음이면 나머지 해제');
+  await page.click('.chip[data-key="supplies"][data-val="활동가키트"]');
   await page.click('[data-for="nextVisit"][data-days="7"]');
   assert.equal(await page.inputValue('#f-nextVisit'), '2026-11-05', '1주 뒤');
   await page.click('[data-for="nextVisit"][data-days="14"]');
   assert.equal(await page.inputValue('#f-nextVisit'), '2026-11-12', '2주 뒤');
   const order = await page.$$eval('#form section.card', els => els.map(e => e.dataset.sec));
-  assert.deepEqual(order, ['date','time','elder','partner','mood','selfCare','discomfort','notice','noticeNote','nextVisit','memo']);
+  assert.deepEqual(order, ['date','time','elder','partner','mood','selfCare','discomfort','notice','noticeNote','supplies','nextVisit','memo']);
   await page.screenshot({ path: SHOT + '/2-missing.png', fullPage: true });
 
   await page.click('.chip[data-key="partner"][data-val="대상자 본인"]');
@@ -132,6 +136,7 @@ fs.mkdirSync(SHOT, { recursive: true });
   const L = Object.values(E.spreadsheets)[0].getSheetByName('전체목록');
   assert.equal(L.cells[1][L.cells[0].indexOf('알림')], '필수 전달사항(의료진, 대상자 가족): 허리 통증이 심해지셨다고 함');
   assert.equal(c('팀'), '따품안');
+  assert.equal(c('지급물품'), '활동가키트');
   assert.equal(c('스스로 가능한 것'), '식사, 수면·휴식'); assert.equal(c('가장 불편한 것'), '허리 통증'); assert.equal(c('다음 방문 날짜'), '2026-11-12');
   assert.equal(c('시작 시간'), '14:00'); assert.equal(c('끝 시간'), '16:30'); assert.equal(c('활동 시간'), '2시간 30분');
   const doc = Object.values(E.docs)[0];
@@ -216,7 +221,7 @@ fs.mkdirSync(SHOT, { recursive: true });
   assert.equal(await page.locator('#recsBox .rec').count(), 0);
   await page.click('[data-view="write"]');
 
-  assert.match(await page.textContent('#footState'), /서버 2026-11-21/);
+  assert.match(await page.textContent('#footState'), /서버 2026-11-21c/);
   assert.deepEqual(errors, []);
 
   // 미리보기(구글 밖) 모드에서도 오류 없이 열림

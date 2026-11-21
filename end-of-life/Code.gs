@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '생애말기 활동기록';
-const APP_VERSION = '2026-11-21'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
+const APP_VERSION = '2026-11-21c'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub의 이 앱 전용 브랜치 — main은 건드리지 않음)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/claude/end-of-life-record/end-of-life/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -68,7 +68,7 @@ const MAX_FAILS = 5;          // 비밀번호 5번 틀리면
 const LOCK_SECONDS = 15 * 60; // 15분 잠금
 /* ---------- 어르신 기초정보: 사회복지사가 입력 → 담당 활동가에게만 보임 ---------- */
 const INFO_SHEET = '어르신기초정보';
-const INFO_HEADERS = ['어르신 이름', '담당 활동가', '성별·나이', '사는 곳', '주요 질환·건강', '가족·보호자', '돌봄 상황', '주의할 점', '전달 메모'];
+const INFO_HEADERS = ['어르신 이름', '담당 활동가1', '담당 활동가2', '상태', '종결일', '성별', '나이', '사는 곳', '주요 질환·건강', '가족·보호자', '돌봄 상황', '주의할 점', '전달 메모'];
 const SPECIAL_SHEETS = () => [LIST_SHEET, KEYWORD_SHEET, FOCUS_SHEET, ACCOUNT_SHEET, INFO_SHEET];
 const PROP_SHEET = 'EOL_SHEET_ID';
 const PROP_FOLDER = 'EOL_FOLDER_ID';
@@ -154,7 +154,7 @@ function myData(auth) {
   const acc = checkAuth_(ss, auth);
   const all = [];
   ss.getSheets().forEach(sh => {
-    if (SPECIAL_SHEETS().indexOf(sh.getName()) >= 0 || sh.getLastRow() < 2) return;
+    if (!isRecordSheet_(sh)) return;
     const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getDisplayValues();
     const h = values[0].map(String);
     const get = (row, name) => { const i = h.indexOf(name); return i >= 0 ? String(row[i] || '') : ''; };
@@ -171,7 +171,8 @@ function myData(auth) {
           partner: g(row, '대화상대'), mood: g(row, '대상자 기분·상태'),
           selfCare: g(row, '스스로 가능한 것'), discomfort: short_(g(row, '가장 불편한 것'), 40),
           notice: g(row, '필수 전달사항'), noticeNote: short_(g(row, '전달 내용'), 60),
-          memo: short_(g(row, '활동 내용·특이사항'), 80), nextVisit: g(row, '다음 방문 날짜')
+          memo: short_(g(row, '활동 내용·특이사항'), 80), nextVisit: g(row, '다음 방문 날짜'),
+          supplies: g(row, '지급물품')
         };
       }
     }
@@ -203,10 +204,11 @@ function myData(auth) {
     return {
       name: g.name, last: g.visits.length ? g.visits[0].date : '', count: g.visits.length,
       helpers: inf ? inf.helpers.join(', ') : '',
+      closed: !!(inf && inf.closed), closedOn: inf ? inf.closedOn : '',
       info: inf ? inf.fields : [],      // [{ label, value }] 사회복지사가 입력한 기초정보
       visits: g.visits.slice(0, 30)
     };
-  }).sort((a, b) => String(b.last).localeCompare(String(a.last)));
+  }).sort((a, b) => (a.closed - b.closed) || String(b.last).localeCompare(String(a.last))); // 종결은 맨 뒤
   return { name: acc.name, team: acc.team, mine: mine.slice(0, 100), elders: elders };
 }
 
@@ -294,8 +296,16 @@ function upsertRecord_(record, final) {
 
 /* ---------------- 내부 함수 ---------------- */
 
-function normName_(s) { return String(s || '').replace(/\s+/g, ''); }
-function elderKey_(s) { return String(s || '').replace(/[\s.]+/g, ''); }
+// 휴대폰마다 한글을 다른 방식(NFC/NFD)으로 보낼 수 있어 같은 글자로 맞춤
+function nfc_(s) { s = String(s || ''); return s.normalize ? s.normalize('NFC') : s; }
+function normName_(s) { return nfc_(s).replace(/\s+/g, ''); }
+function elderKey_(s) { return nfc_(s).replace(/[\s.]+/g, ''); }
+/** 앱이 만든 기록 탭인지 (1행 첫 칸이 '기록ID'이고 '어르신 이름' 칸이 있음) — 사람이 만든 다른 탭은 건드리지 않음 */
+function isRecordSheet_(sh) {
+  if (SPECIAL_SHEETS().indexOf(sh.getName()) >= 0 || sh.getLastRow() < 2 || sh.getLastColumn() < 2) return false;
+  const h = sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0].map(String);
+  return h[0] === '기록ID' && h.indexOf('어르신 이름') >= 0;
+}
 function short_(s, n) { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n) + '…' : s; }
 
 function secret_() {
@@ -322,7 +332,7 @@ function accountSheet_(ss) {
     sh = ss.insertSheet(ACCOUNT_SHEET);
     const seen = {}, rows = [];
     ss.getSheets().forEach(t => {
-      if (SPECIAL_SHEETS().indexOf(t.getName()) >= 0 || t.getLastRow() < 2) return;
+      if (!isRecordSheet_(t)) return;
       const v = t.getRange(1, 1, t.getLastRow(), t.getLastColumn()).getDisplayValues();
       const ai = v[0].indexOf('활동가'), ti = v[0].indexOf('팀');
       if (ai < 0) return;
@@ -357,32 +367,80 @@ function accountSheet_(ss) {
   return sh;
 }
 
-/** 「어르신기초정보」 탭 (없으면 제목줄만 만듦) → [{ name, helpers:[], fields:[{label,value}] }] */
+/** 「어르신기초정보」 탭 (없으면 제목줄만 만듦, 예전 칸 구성이면 내용을 새 칸으로 옮김)
+ *  → [{ name, helpers:[], closed, closedOn, fields:[{label,value}] }] */
 function readInfo_(ss) {
   let sh = ss.getSheetByName(INFO_SHEET);
-  if (!sh) {
-    sh = ss.insertSheet(INFO_SHEET);
-    const head = sh.getRange(1, 1, 1, INFO_HEADERS.length);
-    head.setValues([INFO_HEADERS]);
-    head.setFontWeight('bold');
-    head.setBackground('#e8f0fe');
-    sh.setFrozenRows(1);
-    sh.getRange(1, INFO_HEADERS.length + 2, 4, 1).setValues([['사용법'], ['· 한 어르신 = 한 줄. 담당 활동가는 쉼표로 여러 명(예: 이명옥, 심윤재)'],
-      ['· 담당 활동가로 적힌 사람만 앱의 「내 기록 → 내 어르신」에서 이 정보를 봅니다.'], ['· 칸을 비워 두면 그 항목은 앱에 나오지 않습니다.']]);
-    return [];
-  }
+  if (!sh) sh = ss.insertSheet(INFO_SHEET);
+  if (sh.getLastRow() === 0) writeInfoSheet_(sh, []);
+  migrateInfo_(sh);
   const last = sh.getLastRow();
   if (last < 2) return [];
   const v = sh.getRange(1, 1, last, sh.getLastColumn()).getDisplayValues();
   const h = v[0].map(String);
-  const ni = h.indexOf('어르신 이름'), hi = h.indexOf('담당 활동가');
+  const ni = h.indexOf('어르신 이름'), ci = h.indexOf('상태'), di = h.indexOf('종결일');
+  const hi = h.map((x, i) => /^담당 ?활동가/.test(x) ? i : -1).filter(i => i >= 0);
   if (ni < 0) return [];
+  const skip = [ni, ci, di].concat(hi);
   return v.slice(1).filter(r => String(r[ni]).trim()).map(r => ({
     name: String(r[ni]).trim(),
-    helpers: hi >= 0 ? String(r[hi]).split(/[,，/·\s]+/).filter(Boolean) : [],
+    helpers: hi.reduce((a, i) => a.concat(String(r[i] || '').split(/[,，/·]+/).map(x => x.trim()).filter(Boolean)), []),
+    closed: ci >= 0 && /종결/.test(String(r[ci])),
+    closedOn: di >= 0 ? String(r[di] || '').trim() : '',
     fields: h.map((label, i) => ({ label: label, value: String(r[i] || '').trim() }))
-      .filter((f, i) => f.label && i !== ni && i !== hi && f.value)
+      .filter((f, i) => f.label && skip.indexOf(i) < 0 && f.value && !/^사용법|^·/.test(f.label))
   }));
+}
+
+/** 기초정보 탭을 새 칸 구성으로 다시 씀 (rows는 INFO_HEADERS 순서 + 덧붙인 칸) */
+function writeInfoSheet_(sh, rows, extraHeaders) {
+  const headers = INFO_HEADERS.concat(extraHeaders || []);
+  sh.clear();
+  const all = [headers].concat(rows.map(r => headers.map((h, i) => r[i] || '')));
+  const rg = sh.getRange(1, 1, all.length, headers.length);
+  rg.setNumberFormat('@');
+  rg.setValues(all);
+  const head = sh.getRange(1, 1, 1, headers.length);
+  head.setFontWeight('bold');
+  head.setBackground('#e8f0fe');
+  sh.setFrozenRows(1);
+  const col = name => headers.indexOf(name) + 1;
+  sh.getRange(2, col('상태'), 500, 1).setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList(['진행', '종결'], true).setAllowInvalid(true).build());
+  sh.getRange(2, col('성별'), 500, 1).setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireValueInList(['여', '남'], true).setAllowInvalid(true).build());
+  sh.getRange(1, headers.length + 2, 5, 1).setValues([['사용법'], ['· 한 어르신 = 한 줄. 담당 활동가는 1·2 칸에 한 명씩'],
+    ['· 담당 활동가로 적힌 사람만 앱의 「내 기록 → 내 어르신」에서 이 정보를 봅니다.'],
+    ['· 상태에 종결을 고르면 앱에서 「종결된 어르신」으로 갑니다(지난 기록은 그대로).'], ['· 칸을 비워 두면 그 항목은 앱에 나오지 않습니다.']]);
+}
+
+/** 예전 칸 구성(담당 활동가 한 칸, 성별·나이 한 칸)이면 내용을 새 칸으로 옮김. 한 번만 */
+function migrateInfo_(sh) {
+  if (sh.getLastColumn() < 1) return;
+  const v = sh.getRange(1, 1, Math.max(sh.getLastRow(), 1), sh.getLastColumn()).getDisplayValues();
+  const h = v[0].map(x => String(x).trim());
+  if (h.indexOf('담당 활동가1') >= 0 || (h.indexOf('담당 활동가') < 0 && h.indexOf('성별·나이') < 0)) return;
+  // 사용법 칸(빈 칸 뒤 오른쪽)은 버리고, 아는 칸은 새 자리로, 모르는 칸은 끝에 붙임
+  let end = h.length;
+  for (let i = 0; i < h.length; i++) if (!h[i]) { end = i; break; }
+  const known = INFO_HEADERS.concat(['담당 활동가', '성별·나이']);
+  const extra = h.slice(0, end).filter(x => known.indexOf(x) < 0);
+  const rows = v.slice(1).filter(r => String(r[h.indexOf('어르신 이름')] || '').trim()).map(r => {
+    const g = name => { const i = h.indexOf(name); return i >= 0 && i < end ? String(r[i] || '').trim() : ''; };
+    const helpers = g('담당 활동가').split(/[,，/·]+/).map(x => x.trim()).filter(Boolean);
+    const sa = g('성별·나이');
+    const sex = (sa.match(/[남여]/) || [''])[0];
+    const age = (sa.match(/\d+/) || [''])[0];
+    const out = INFO_HEADERS.map(name => {
+      if (name === '담당 활동가1') return helpers[0] || '';
+      if (name === '담당 활동가2') return helpers.slice(1).join(', ');
+      if (name === '성별') return sex || (sa && !age ? sa : '');
+      if (name === '나이') return age ? age + '세' : '';
+      return g(name);
+    });
+    return out.concat(extra.map(g));
+  });
+  writeInfoSheet_(sh, rows, extra);
 }
 
 function findAccount_(ss, name) {
@@ -444,7 +502,7 @@ function refreshPriorityIfChanged_(ss, keywords) {
   const byId = {};
   ss.getSheets().forEach(sh => {
     const name = sh.getName();
-    if (SPECIAL_SHEETS().indexOf(name) >= 0 || sh.getLastRow() < 2) return;
+    if (!isRecordSheet_(sh)) return;
     const header = ensureHeaders_(sh, [LEVEL_HEADER, KEYWORD_HEADER]);
     const values = sh.getRange(2, 1, sh.getLastRow() - 1, header.length).getDisplayValues();
     const li = header.indexOf(LEVEL_HEADER), ki = header.indexOf(KEYWORD_HEADER);

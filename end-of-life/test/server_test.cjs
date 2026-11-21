@@ -52,7 +52,7 @@ E.api.saveDraft(rec('x1', { kind: '전체목록' }));
 assert.equal(rows(det).length, 2);
 // getInitData
 const init = E.api.getInitData();
-assert.equal(init.version, '2026-11-21c');
+assert.equal(init.version, '2026-11-21d');
 assert.deepEqual(init.elders, [], '저장된 정보는 화면으로 보내지 않음');
 assert.ok(!('docUrl' in E.api.saveVisit(rec('a1'))), '문서 주소도 보내지 않음');
 // 필수값
@@ -255,5 +255,34 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   const nfd = '이명옥'.normalize('NFD');
   const tk = P.api.login({ name: nfd, pin: '1111' });
   assert.equal(tk.name, '이명옥');
+}
+{
+  // 실제 시트 상태: 새 칸 + 점 모양이 다른 예전 칸(성별ㆍ나이 등)이 뒤에 남음 → 값을 제자리로 합치고 남는 칸 정리
+  const Q = makeEnv(); Q.api.setup();
+  Q.api.saveVisit(rec('q1', { author: '심윤재' }));
+  const ss = Object.values(Q.spreadsheets)[0];
+  const sh = ss.insertSheet('어르신기초정보');
+  const NEW = ['어르신 이름', '담당 활동가1', '담당 활동가2', '상태', '종결일', '성별', '나이', '사는 곳', '주요 질환·건강', '가족·보호자', '돌봄 상황', '주의할 점', '전달 메모'];
+  sh.cells.push(NEW.concat(['성별ㆍ나이', '주요 질환ㆍ건강', '가족ㆍ보호자', '', '사용법']));
+  const blank = () => NEW.map(() => '');
+  const r1 = blank(); r1[0] = '김상례'; r1[1] = '이명옥'; r1[2] = '심윤재'; r1[7] = '오정구 ○○로';
+  sh.cells.push(r1.concat(['여', '', '', '', '· 한 어르신']));
+  const r2 = blank(); r2[0] = '채원근'; r2[1] = '임종하'; r2[5] = '남'; r2[8] = '간경변';
+  sh.cells.push(r2.concat(['남 · 80세', '예전 값', '', '', '']));
+  const tok = Q.api.login({ name: '심윤재', pin: '1111' }).token;
+  const d = Q.api.myData({ name: '심윤재', token: tok });
+  assert.deepEqual(sh.cells[0].slice(0, 13), NEW, '새 칸 그대로');
+  assert.ok(!sh.cells[0].some(x => /ㆍ/.test(x)), '남는 칸 정리');
+  const row = n => Object.fromEntries(NEW.map((h, i) => [h, sh.cells.find(r => r[0] === n)[i]]));
+  assert.equal(row('김상례')['성별'], '여', '성별 칸으로 옮김');
+  assert.equal(row('김상례')['사는 곳'], '오정구 ○○로');
+  assert.equal(row('김상례')['담당 활동가2'], '심윤재');
+  assert.equal(row('채원근')['성별'], '남'); assert.equal(row('채원근')['나이'], '80세');
+  assert.equal(row('채원근')['주요 질환·건강'], '간경변', '새 칸 값이 우선');
+  const e = d.elders.find(x => x.name === '김상례');
+  assert.deepEqual(e.info.map(f => f.label + '=' + f.value), ['성별=여', '사는 곳=오정구 ○○로']);
+  assert.equal(d.elders.filter(x => x.name === '김상례').length, 1, '한 번만');
+  const snap = JSON.stringify(sh.cells); Q.api.myData({ name: '심윤재', token: tok });
+  assert.equal(JSON.stringify(sh.cells), snap, '다시는 안 건드림');
 }
 console.log('서버 시험 모두 통과');

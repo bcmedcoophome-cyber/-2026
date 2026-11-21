@@ -57,7 +57,7 @@ const STATUS_DRAFT = '임시저장';
 const STATUS_SENT = '전송완료';
 const LINK_HEADER = '기록지';
 const DEFAULT_PREFIX = '생애말기활동가기록지';
-/* ---------- 활동가 계정: 이름 + 숫자 비밀번호 ----------
+/* ---------- 활동가 계정: 이름 + 숫자 6자리 비밀번호 ----------
  * 시트의 「활동가계정」 탭에서 관리합니다(처음에 지금까지 기록을 보낸 활동가로 자동 생성, 비밀번호 자동 발급).
  * 새 활동가는 이름·팀만 적으면 다음 로그인 시도 때 비밀번호가 자동으로 채워집니다.
  * '사용' 칸에 X를 적으면 로그인할 수 없습니다. */
@@ -115,6 +115,14 @@ function setup() {
  * (전에 만난 어르신 목록은 각 휴대폰에 남은 기록으로만 보여 줌)
  */
 function getInitData() {
+  // 처음 한 번: 「활동가계정」(비밀번호 자동 발급)·「어르신기초정보」 탭을 바로 만들어 둠
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('EOL_TABS_READY')) {
+    const { ss } = ensureStorage_();
+    accountSheet_(ss);
+    readInfo_(ss);
+    props.setProperty('EOL_TABS_READY', '1');
+  }
   return { elders: [], version: APP_VERSION, auth: true };
 }
 
@@ -335,14 +343,14 @@ function accountSheet_(ss) {
       ['· 새 활동가: 이름·팀만 적으면 비밀번호가 자동으로 생깁니다.'], ['· 사용 칸에 X → 로그인 못 함.'],
       ['· 비밀번호를 바꾸면 그 활동가는 다시 로그인해야 합니다.']]);
   }
-  // 비밀번호가 빈 줄은 4자리 숫자로 채움
+  // 비밀번호가 빈 줄은 6자리 숫자로 채움
   const last = sh.getLastRow();
   if (last > 1) {
     const pins = sh.getRange(2, 3, last - 1, 1).getDisplayValues();
     const names = sh.getRange(2, 1, last - 1, 1).getDisplayValues();
     let changed = false;
     pins.forEach((p, i) => {
-      if (names[i][0] && !String(p[0]).trim()) { p[0] = String(1000 + Math.floor(Math.random() * 9000)); changed = true; }
+      if (names[i][0] && !String(p[0]).trim()) { p[0] = String(100000 + Math.floor(Math.random() * 900000)); changed = true; }
     });
     if (changed) { const r = sh.getRange(2, 3, last - 1, 1); r.setNumberFormat('@'); r.setValues(pins); }
   }

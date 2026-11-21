@@ -124,7 +124,7 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   acc.cells.push(['박새로', '해바라기', '', 'O']);
   assert.throws(() => B.api.login({ name: '박새로', pin: '0000' }), /맞지 않습니다/);
   const pin = acc.cells.find(r => r[0] === '박새로')[2];
-  assert.match(pin, /^\d{4}$/, '자동 비밀번호');
+  assert.match(pin, /^\d{6}$/, '자동 비밀번호');
   const t = B.api.login({ name: ' 박 새로 ', pin });
   assert.equal(t.name, '박새로'); assert.equal(t.team, '해바라기'); assert.ok(t.token);
   // 작성자는 계정으로 고정 (화면에서 다른 이름을 보내도)
@@ -175,5 +175,16 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   // 특수 탭 보호
   C.api.saveDraft(Object.assign(mk('c9', '김은아', 'x', '2026-11-05', 'y'), { kind: '활동가계정' }));
   assert.ok(!ss.getSheetByName('활동가계정').cells.some(r => r[0] === 'c9'));
+}
+{
+  const T = makeEnv(); T.api.setup();
+  T.api.saveVisit(rec('t1'));
+  const ss = Object.values(T.spreadsheets)[0];
+  ss.sheets.splice(ss.sheets.findIndex(x => x.name === '활동가계정'), 1); // 아직 없다고 치고
+  T.props['EOL_TABS_READY'] && delete T.props['EOL_TABS_READY'];
+  T.api.getInitData();
+  const acc = ss.getSheetByName('활동가계정');
+  assert.ok(acc && acc.cells.some(r => r[0] === '이명옥' && /^\d{6}$/.test(r[2])), '앱 열면 계정 탭 + 비밀번호');
+  assert.ok(ss.getSheetByName('어르신기초정보'), '앱 열면 기초정보 탭');
 }
 console.log('서버 시험 모두 통과');

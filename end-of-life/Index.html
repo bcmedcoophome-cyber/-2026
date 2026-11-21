@@ -48,7 +48,7 @@
   section.card h2 .tick { margin-left: auto; color: var(--ok); font-size: 26px; }
   .hint { font-size: 17px; color: var(--muted); margin: -4px 0 12px; }
 
-  input[type=text], input[type=date], textarea {
+  input[type=text], input[type=date], input[type=password], textarea {
     width: 100%; font: inherit; font-size: 22px; color: var(--ink); background: var(--bg);
     border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; min-height: 60px; }
   textarea { min-height: 140px; resize: vertical; line-height: 1.5; }
@@ -114,6 +114,24 @@
   .time-row .btn { padding: 8px 10px; flex: none; }
   .time-calc { margin: 4px 0 0; font-size: 20px; font-weight: 700; color: var(--ok); }
   .time-calc.bad { color: var(--danger); }
+  button.tab { background: none; border: 0; border-bottom: 4px solid transparent; font-family: inherit; cursor: pointer; }
+  .login-card { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 20px 16px; display: grid; gap: 14px; }
+  .login-card h2 { margin: 0; font-size: 24px; }
+  .login-card label { font-weight: 700; display: grid; gap: 6px; }
+  .sub-tabs { display: flex; gap: 8px; margin: 0 0 14px; }
+  .sub-tabs .chip { flex: 1; }
+  .rec { background: var(--card); border: 2px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+  .rec .r-top { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 20px; }
+  .rec .r-top small { font-weight: 400; color: var(--muted); font-size: 16px; white-space: nowrap; }
+  .rec dl { margin: 8px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 18px; }
+  .rec dt { color: var(--muted); white-space: nowrap; }
+  .rec dd { margin: 0; min-width: 0; word-break: keep-all; overflow-wrap: anywhere; }
+  .rec .alert { color: var(--danger); font-weight: 700; }
+  .elder-btn { width: 100%; text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
+  .elder-btn .go { float: right; color: var(--brand); font-weight: 700; }
+  .info-card { background: var(--brand-soft); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
+  .info-card h3 { margin: 0 0 6px; font-size: 19px; }
+  .empty-note { color: var(--muted); padding: 12px 4px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -123,12 +141,45 @@
   <span id="progress"></span>
 </header>
 <nav class="tabs">
-  <span class="tab on" aria-current="page">📝 기록하기</span>
+  <button type="button" class="tab on" data-view="write">📝 기록하기</button>
+  <button type="button" class="tab" data-view="mine" id="mineTab" hidden>📋 내 기록</button>
   <a class="tab" href="https://www.bcmedcoop.org/careg/#s12" target="_blank" rel="noopener">📖 매뉴얼</a>
 </nav>
 
-<main>
-  <div id="demoBanner" class="banner info">미리보기 화면입니다. 구글 Apps Script로 배포해야 드라이브에 저장됩니다.</div>
+<main id="loginMain" hidden>
+  <div id="loginErr" class="banner danger"></div>
+  <section class="login-card">
+    <h2>👋 활동가 로그인</h2>
+    <p class="hint" style="margin:0">이름과 비밀번호(숫자 4자리)를 넣어 주세요.<br>비밀번호는 담당 사회복지사에게 받으세요.</p>
+    <label>이름<input type="text" id="loginName" autocomplete="username" placeholder="예: 홍길동"></label>
+    <label>비밀번호<input type="password" id="loginPin" inputmode="numeric" autocomplete="current-password" maxlength="8" placeholder="숫자 4자리"></label>
+    <button type="button" class="btn primary" id="loginBtn">들어가기</button>
+    <p class="hint" style="margin:0">한 번 들어가면 이 휴대폰이 기억합니다.</p>
+  </section>
+</main>
+
+<main id="mineMain" hidden>
+  <div id="mineErr" class="banner danger"></div>
+  <section class="card" style="padding:14px 16px">
+    <div class="me"><div><span id="mineName"></span><small id="mineTeam"></small></div>
+      <button class="btn small" type="button" id="mineReload">새로고침</button></div>
+  </section>
+  <div id="mineListView">
+    <div class="sub-tabs">
+      <button type="button" class="chip" data-sub="recs" aria-pressed="true">쓴 기록 <span id="cntRecs"></span></button>
+      <button type="button" class="chip" data-sub="elders" aria-pressed="false">내 어르신 <span id="cntElders"></span></button>
+    </div>
+    <div id="recsBox"></div>
+    <div id="eldersBox" hidden></div>
+  </div>
+  <div id="elderView" hidden>
+    <button type="button" class="btn small" id="elderBack" style="margin-bottom:12px">← 내 어르신 목록</button>
+    <div id="elderBox"></div>
+  </div>
+</main>
+
+<main id="writeMain">
+  <div id="demoBanner" class="banner info">미리보기(예시) 화면입니다. 이름·비밀번호는 아무거나 넣어도 들어가지고, 어르신 정보는 지어낸 예시입니다. 실제로 저장되지 않습니다.</div>
   <div id="errBanner" class="banner danger"></div>
   <div id="okBanner" class="banner ok"></div>
   <div id="queueBanner" class="banner info"><span id="queueText"></span>
@@ -159,7 +210,7 @@
   <form id="form" autocomplete="off" onsubmit="return false"></form>
 </main>
 
-<footer>
+<footer id="writeFooter">
   <div class="inner">
     <button class="btn" type="button" id="newBtn">NEW</button>
     <button class="btn" type="button" id="saveBtn">저장</button>
@@ -195,7 +246,7 @@ const TEAMS = ['따품안', '임종하면', '해바라기', '햇살동행'];
  *  showIf: 다른 항목이 특정 값일 때만 보임
  * ===================================================================== */
 const KIND = { name: '방문기록지', filePrefix: '생애말기활동가기록지', docTitle: '생애말기활동가기록지' };
-const UI_VERSION = '2026-10-29c'; // 화면 버전 (GitHub에서 고치면 올림)
+const UI_VERSION = '2026-11-21'; // 화면 버전 (GitHub에서 고치면 올림)
 const FORM = [
   { key: 'date', label: '방문날짜', type: 'date', required: true },
   { key: 'time', label: '활동 시간', type: 'timerange', required: true, hint: '시작한 시간과 끝난 시간을 넣어 주세요' },
@@ -223,11 +274,16 @@ const LS = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem(k); } catch (e) {} }
 };
+const KEY_AUTH = 'eol_auth';
 const KEY_ME = 'eol_me', KEY_DRAFT = 'eol_draft', KEY_SAVED = 'eol_saved', KEY_QUEUE = 'eol_queue', KEY_ELDERS = 'eol_elders';
 const $ = id => document.getElementById(id);
 let state = {};
 let pickTeam = '';
 let serverElders = [];
+// 로그인: 서버가 계정 기능을 지원하면(auth) 이름+비밀번호로 들어감. 옛 서버면 예전처럼 팀·이름 고르기
+let auth = LS.get(KEY_AUTH, null);   // { name, team, token }
+let authMode = !!auth;
+let mineData = null;
 
 function today() {
   const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -252,6 +308,13 @@ function renderTeams() {
   $('pickHint').textContent = pickTeam ? pickTeam + ' 팀을 골랐습니다' : '우리 팀을 먼저 누르세요';
 }
 function paintMe() {
+  if (authMode) {
+    $('meBox').hidden = !auth; $('pickBox').hidden = true;
+    $('meName').textContent = auth ? auth.name : '';
+    $('meTeam').textContent = auth && auth.team ? auth.team + ' 팀' : '';
+    $('changeMe').textContent = '로그아웃';
+    return;
+  }
   const has = hasValue(state.author);
   $('meBox').hidden = !has;
   $('pickBox').hidden = has;
@@ -446,6 +509,12 @@ function onPhrase(e) {
 
 /* ---------- 전에 만난 어르신 ---------- */
 function renderElderChips() {
+  if (authMode && mineData) {
+    const names = mineData.elders.map(e => e.name).slice(0, 8);
+    $('elderChips').innerHTML = names.map(n => `<button type="button" class="chip" data-elder="${esc(n)}">${esc(n)}</button>`).join('');
+    $('elderHint').hidden = !names.length;
+    return;
+  }
   const me = state.author || '';
   const local = LS.get(KEY_ELDERS, []); // 이 휴대폰에서 보낸 기록
   const all = serverElders.concat(local).filter(x => x.name && (!me || x.author === me));
@@ -477,6 +546,7 @@ let version = '';
 function setFoot(text) { $('footState').textContent = text + ' · 화면 ' + UI_VERSION + (version ? ' · 서버 ' + version : ''); }
 
 function freshState() {
+  if (authMode && auth) return { date: today(), author: auth.name, team: auth.team || '' };
   const me = LS.get(KEY_ME, {});
   return { date: today(), author: me.name || '', team: me.team || '' };
 }
@@ -521,12 +591,139 @@ function validate(needAll) {
 /* ---------- 서버 ---------- */
 function callServer(fn, arg) {
   return new Promise((resolve, reject) => {
-    if (!IS_GAS) {
-      setTimeout(() => resolve(fn === 'getInitData' ? { elders: [], version: '미리보기' } : { ok: true, docUrl: '', demo: true }), 300);
-      return;
-    }
+    if (!IS_GAS) { setTimeout(() => demoServer(fn, arg, resolve, reject), 300); return; }
     google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg);
   });
+}
+/** 저장·전송: 로그인 정보를 보내는 순간에 붙임(대기열에 있던 기록도 지금 계정으로) */
+function sendRecord(fn, rec) {
+  const arg = authMode && auth ? Object.assign({}, rec, { auth: { name: auth.name, token: auth.token } }) : rec;
+  return callServer(fn, arg).catch(err => { if (isAuthErr(err)) logout('다시 로그인해 주세요.'); throw err; });
+}
+function isAuthErr(err) { return /로그인이 필요/.test(errText(err)); }
+
+/* ---------- 로그인 / 화면 전환 ---------- */
+function showView(v) {
+  const loggedOut = authMode && !auth;
+  if (loggedOut) v = 'login';
+  $('loginMain').hidden = v !== 'login';
+  $('writeMain').hidden = $('writeFooter').hidden = v !== 'write';
+  $('mineMain').hidden = v !== 'mine';
+  $('progress').hidden = v !== 'write';
+  $('mineTab').hidden = !authMode || loggedOut;
+  document.querySelectorAll('.tabs [data-view]').forEach(b => {
+    b.classList.toggle('on', b.dataset.view === v);
+    b.hidden = loggedOut || (b.dataset.view === 'mine' && !authMode);
+  });
+  if (v === 'mine') renderMine();
+  window.scrollTo({ top: 0 });
+}
+async function onLogin() {
+  const name = $('loginName').value.trim(), pin = $('loginPin').value.trim();
+  const box = $('loginErr');
+  if (!name || !pin) { box.textContent = '이름과 비밀번호를 넣어 주세요.'; box.classList.add('show'); return; }
+  $('loginBtn').disabled = true; $('loginBtn').textContent = '확인 중…';
+  try {
+    const r = await callServer('login', { name, pin });
+    auth = { name: r.name, team: r.team || '', token: r.token };
+    LS.set(KEY_AUTH, auth);
+    box.classList.remove('show'); $('loginPin').value = '';
+    state.author = auth.name; state.team = auth.team;
+    paint(); showView('write'); loadMine();
+    flash('okBanner', `${esc(auth.name)}님, 반갑습니다.`);
+  } catch (err) {
+    box.textContent = errText(err); box.classList.add('show');
+  } finally { $('loginBtn').disabled = false; $('loginBtn').textContent = '들어가기'; }
+}
+function logout(msg) {
+  auth = null; mineData = null; LS.del(KEY_AUTH);
+  showView('login');
+  if (msg) { $('loginErr').textContent = msg; $('loginErr').classList.add('show'); }
+}
+function loadMine() {
+  if (!authMode || !auth) return Promise.resolve();
+  $('mineReload').disabled = true;
+  return callServer('myData', { name: auth.name, token: auth.token }).then(d => {
+    mineData = d; renderElderChips();
+    if (!$('mineMain').hidden) renderMine();
+  }).catch(err => {
+    if (isAuthErr(err)) return logout('다시 로그인해 주세요.');
+    $('mineErr').textContent = '내 기록을 불러오지 못했습니다(' + errText(err) + ').'; $('mineErr').classList.add('show');
+  }).finally(() => { $('mineReload').disabled = false; });
+}
+
+/* ---------- 내 기록 (요약본) ---------- */
+let mineSub = 'recs';
+function dateText(v) { const t = pickText('date', v); return v ? t : ''; }
+function recCard(x, showAuthor) {
+  const row = (k, v, cls) => v ? `<dt>${k}</dt><dd${cls ? ` class="${cls}"` : ''}>${esc(v)}</dd>` : '';
+  const notice = x.notice && x.notice !== '없음';
+  return `<article class="rec">
+    <div class="r-top"><span>${esc(showAuthor ? (x.author || '') : (x.elder || ''))}</span><small>${esc(dateText(x.date))}</small></div>
+    <dl>${row('활동 시간', x.time)}${row('대화상대', x.partner)}${row('기분·상태', x.mood)}
+      ${row('스스로 가능', x.selfCare)}${row('불편한 것', x.discomfort)}
+      ${notice ? row('전달', x.notice + (x.noticeNote ? ' — ' + x.noticeNote : ''), 'alert') : ''}
+      ${row('활동 내용', x.memo)}${row('다음 방문', x.nextVisit ? dateText(x.nextVisit) : '')}
+      ${x.status && x.status !== '전송완료' ? row('상태', x.status) : ''}</dl>
+  </article>`;
+}
+function renderMine() {
+  $('mineName').textContent = auth ? auth.name : '';
+  $('mineTeam').textContent = auth && auth.team ? auth.team + ' 팀' : '';
+  const d = mineData;
+  document.querySelectorAll('.sub-tabs [data-sub]').forEach(b => b.setAttribute('aria-pressed', b.dataset.sub === mineSub));
+  $('recsBox').hidden = mineSub !== 'recs'; $('eldersBox').hidden = mineSub !== 'elders';
+  if (!d) { $('recsBox').innerHTML = '<p class="empty-note">불러오는 중…</p>'; return; }
+  $('cntRecs').textContent = d.mine.length; $('cntElders').textContent = d.elders.length;
+  $('recsBox').innerHTML = d.mine.length ? d.mine.map(x => recCard(x, false)).join('')
+    : '<p class="empty-note">아직 보낸 기록이 없습니다.</p>';
+  $('eldersBox').innerHTML = d.elders.length ? d.elders.map((e, i) => `<button type="button" class="rec elder-btn" data-elder-i="${i}">
+      <div class="r-top"><span>${esc(e.name)} 어르신</span><span class="go">보기 ›</span></div>
+      <dl><dt>최근 방문</dt><dd>${esc(e.last ? dateText(e.last) : '아직 없음')}</dd><dt>방문 기록</dt><dd>${e.count}건</dd>
+      ${e.helpers ? `<dt>담당</dt><dd>${esc(e.helpers)}</dd>` : ''}</dl></button>`).join('')
+    : '<p class="empty-note">맡은 어르신이 아직 없습니다.</p>';
+}
+function openElder(i) {
+  const e = mineData.elders[i];
+  if (!e) return;
+  const info = (e.info || []).map(f => `<dt>${esc(f.label)}</dt><dd>${esc(f.value)}</dd>`).join('');
+  $('elderBox').innerHTML = `<h2 style="margin:0 0 12px;font-size:24px">${esc(e.name)} 어르신</h2>
+    <div class="info-card"><h3>📌 기초정보 <small style="font-weight:400;color:var(--muted)">(사회복지사 작성)</small></h3>
+      ${info ? `<dl class="rec" style="border:0;padding:0;margin:0;background:none"><div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px">${info}</div></dl>` : '<p class="empty-note" style="padding:0">아직 입력된 기초정보가 없습니다.</p>'}</div>
+    <h3 style="margin:0 0 10px">🗓 방문 내역 (${e.count}건, 최근 순)</h3>
+    ${e.visits.length ? e.visits.map(x => recCard(x, true)).join('') : '<p class="empty-note">아직 방문 기록이 없습니다.</p>'}`;
+  $('mineListView').hidden = true; $('elderView').hidden = false; window.scrollTo({ top: 0 });
+}
+
+/* ---------- 미리보기(구글 밖)용 예시 서버: 실제 어르신 정보가 아닌 지어낸 예시 ---------- */
+function demoServer(fn, arg, ok, fail) {
+  if (fn === 'getInitData') return ok({ elders: [], version: '미리보기', auth: true });
+  if (fn === 'login') return ok({ ok: true, name: arg.name, team: '햇살동행', token: 'demo' });
+  if (fn === 'myData') return ok(DEMO_MINE(arg.name));
+  ok({ ok: true, docUrl: '', demo: true });
+}
+function DEMO_MINE(me) {
+  const v = (date, author, elder, o) => Object.assign({ id: date + author, date, author, elder, status: '전송완료' }, o);
+  const a = [
+    v('2026-11-19', me, '박○순', { time: '1시간', partner: '대상자 본인, 자녀', mood: '활발', selfCare: '식사, 화장실', memo: '옛날 사진 보며 이야기 나눔. 말벗 해드림. 손 마사지 해드림.', notice: '없음', nextVisit: '2026-11-26' }),
+    v('2026-11-17', '정○희', '박○순', { time: '45분', partner: '대상자 본인', mood: '통증', discomfort: '무릎 통증', notice: '의료진', noticeNote: '무릎 통증이 심해졌다고 하심. 진통제 복용 여부 확인 부탁', memo: '찬송가 함께 부름.' }),
+    v('2026-11-12', me, '박○순', { time: '50분', partner: '요양보호사', mood: '수면, 무기력', selfCare: '수면·휴식', discomfort: '잠을 오래 주무심', notice: '없음', memo: '주무셔서 요양보호사와 이야기 나눔.' }),
+    v('2026-11-18', me, '최○길', { time: '35분', partner: '대상자 본인, 배우자', mood: '우울', discomfort: '입맛이 없으심', notice: '사회복지사', noticeNote: '식사량이 줄었다고 배우자분이 걱정하심', memo: '산책 함께 함. 가족과 이야기 나눔.', nextVisit: '2026-11-25' })
+  ];
+  const mine = a.filter(x => x.author === me).sort((x, y) => y.date.localeCompare(x.date));
+  const group = n => a.filter(x => x.elder === n).sort((x, y) => y.date.localeCompare(x.date));
+  return { name: me, team: '햇살동행', mine, elders: [
+    { name: '박○순', last: '2026-11-19', count: 3, helpers: me + ', 정○희', visits: group('박○순'), info: [
+      { label: '성별·나이', value: '여 · 88세' }, { label: '사는 곳', value: '○○동 (아파트 3층, 엘리베이터 있음)' },
+      { label: '주요 질환·건강', value: '퇴행성 관절염, 고혈압. 귀가 어두우심(왼쪽)' }, { label: '가족·보호자', value: '딸(주보호자, 근처 거주), 아들(타지역)' },
+      { label: '돌봄 상황', value: '요양보호사 오전 3시간, 재택의료 월 1회' }, { label: '주의할 점', value: '오른쪽에서 크게 천천히 말씀드리기. 낙상 주의' },
+      { label: '전달 메모', value: '옛날 사진·찬송가 좋아하심' }] },
+    { name: '최○길', last: '2026-11-18', count: 1, helpers: me, visits: group('최○길'), info: [
+      { label: '성별·나이', value: '남 · 91세' }, { label: '주요 질환·건강', value: '폐암 말기, 산소 사용' },
+      { label: '가족·보호자', value: '배우자와 둘이 거주' }, { label: '주의할 점', value: '산소줄 주의. 담배·불 가까이 금지' }] },
+    { name: '이○자', last: '', count: 0, helpers: me, visits: [], info: [
+      { label: '성별·나이', value: '여 · 84세' }, { label: '돌봄 상황', value: '다음 주 첫 방문 예정' }] }
+  ] };
 }
 
 /* ---------- 전송 ---------- */
@@ -540,7 +737,7 @@ async function onConfirm() {
   const btn = $('sendBtn');
   btn.disabled = true; btn.textContent = '보내는 중…';
   try {
-    const res = await callServer('saveVisit', rec);
+    const res = await sendRecord('saveVisit', rec);
     const link = res && res.docUrl ? ` <a href="${esc(res.docUrl)}" target="_blank" rel="noopener">기록지 보기</a>` : '';
     flash('okBanner', `✅ ${esc(rec.meta.elder)} 어르신 기록을 보냈습니다.${res && res.demo ? ' (미리보기라 실제로 보내지지는 않음)' : ''}${link}`, 15000);
     rememberElder(rec);
@@ -575,7 +772,7 @@ async function flushQueue() {
   let sent = 0;
   for (const rec of q) {
     try {
-      await callServer('saveVisit', rec); // 같은 기록ID는 서버에서 중복 저장하지 않음
+      await sendRecord('saveVisit', rec); // 같은 기록ID는 서버에서 중복 저장하지 않음
       sent++; rememberElder(rec);
       LS.set(KEY_QUEUE, LS.get(KEY_QUEUE, []).filter(x => x.id !== rec.id));
     } catch (e) { /* 다음에 다시 */ }
@@ -603,7 +800,7 @@ function saveCurrent(silent) {
   const who = esc(state.elder);
   if (!IS_GAS) { flash('okBanner', `💾 ${who} 어르신 기록을 이 휴대폰에 저장했습니다.`); return true; }
   flash('okBanner', `💾 ${who} 어르신 기록을 휴대폰에 저장했습니다. 시트에 저장하는 중…`, 20000);
-  callServer('saveDraft', buildRecord())
+  sendRecord('saveDraft', buildRecord())
     .then(res => flash('okBanner', res && res.duplicate
       ? `이 기록은 이미 보낸 기록입니다.`
       : `💾 ${who} 어르신 기록을 저장했습니다. 다 쓰면 [전송]을 눌러 주세요.`))
@@ -687,7 +884,14 @@ function init() {
   $('teamChips').addEventListener('click', onTeam);
   $('meOk').addEventListener('click', onMeOk);
   $('meInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); onMeOk(); } });
-  $('changeMe').addEventListener('click', () => {
+  $('changeMe').addEventListener('click', e => {
+    if (authMode) { // 로그아웃은 두 번 눌러야 (실수 방지)
+      const b = e.currentTarget;
+      if (b.dataset.armed) { delete b.dataset.armed; return logout(); }
+      b.dataset.armed = '1'; b.textContent = '한 번 더 누르면 로그아웃';
+      setTimeout(() => { delete b.dataset.armed; if (authMode) b.textContent = '로그아웃'; }, 4000);
+      return;
+    }
     pickTeam = state.team || ''; $('meInput').value = state.author || ''; state.author = ''; state.team = '';
     LS.del(KEY_ME); paint(); renderElderChips(); saveDraft();
   });
@@ -704,10 +908,26 @@ function init() {
   $('savedCloseBtn').addEventListener('click', () => $('savedDlg').close());
   $('savedList').addEventListener('click', onSavedClick);
   $('retryBtn').addEventListener('click', flushQueue);
+  document.querySelectorAll('.tabs [data-view]').forEach(b => b.addEventListener('click', () => {
+    showView(b.dataset.view);
+    if (b.dataset.view === 'mine') { $('elderView').hidden = true; $('mineListView').hidden = false; loadMine(); }
+  }));
+  $('loginBtn').addEventListener('click', onLogin);
+  $('loginPin').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); onLogin(); } });
+  $('mineReload').addEventListener('click', loadMine);
+  document.querySelectorAll('.sub-tabs [data-sub]').forEach(b => b.addEventListener('click', () => { mineSub = b.dataset.sub; renderMine(); }));
+  $('eldersBox').addEventListener('click', e => { const b = e.target.closest('[data-elder-i]'); if (b) openElder(+b.dataset.elderI); });
+  $('elderBack').addEventListener('click', () => { $('elderView').hidden = true; $('mineListView').hidden = false; window.scrollTo({ top: 0 }); });
+  showView('write');
   window.addEventListener('online', flushQueue);
 
   callServer('getInitData').then(d => {
     serverElders = d.elders || [];
+    authMode = !!d.auth;
+    if (!authMode && auth) { auth = null; } // 옛 서버: 예전 방식
+    if (authMode && auth) { state.author = auth.name; state.team = auth.team || ''; }
+    paint(); showView($('mineMain').hidden ? 'write' : 'mine');
+    if (authMode && auth) loadMine();
     version = d.version || '옛날 버전';
     setFoot('저장: 휴대폰·시트에 임시저장 · 전송: 기록지 만들기');
     renderElderChips();

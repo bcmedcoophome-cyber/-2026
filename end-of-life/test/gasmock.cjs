@@ -143,7 +143,7 @@ function makeEnv(opts = {}) {
       createHtmlOutputFromFile: () => ({ getContent: () => 'LOCAL-INDEX' }),
       createHtmlOutput: html => ({ html, setTitle() { return this; }, addMetaTag() { return this; } })
     },
-    CacheService: { getScriptCache: () => ({ get: k => cache[k] || null, put: (k, v) => { cache[k] = v; } }) },
+    CacheService: { getScriptCache: () => ({ get: k => cache[k] || null, put: (k, v) => { cache[k] = v; }, remove: k => { delete cache[k]; } }) },
     UrlFetchApp: { fetch: () => { fetchCount.n++; if (opts.githubDown) throw new Error('down');
       return { getResponseCode: () => 200, getContentText: () => opts.githubHtml || '<html>google.script.run</html>' }; } },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
@@ -154,17 +154,40 @@ function makeEnv(opts = {}) {
     },
     SpreadsheetApp, DocumentApp,
     Session: { getActiveUser: () => ({ getEmail: () => 'bcmedcoophome@gmail.com' }), getScriptTimeZone: () => 'Asia/Seoul' },
-    Utilities: { formatDate: (d, tz, f) => '2026-10-25 12:00' + (f.includes('ss') ? ':00' : '') },
+    Utilities: { formatDate: (d, tz, f) => '2026-10-25 12:00' + (f.includes('ss') ? ':00' : ''),
+      getUuid: () => require('crypto').randomUUID(),
+      computeHmacSha256Signature: (v, k) => Array.from(require('crypto').createHmac('sha256', k).update(v).digest()),
+      base64EncodeWebSafe: x => Buffer.from(typeof x === 'string' ? Buffer.from(x) : Buffer.from(x.map(b => b & 255))).toString('base64').replace(/\+/g, '-').replace(/\//g, '_') },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) }
   };
   vm.createContext(ctx);
-  vm.runInContext(fs.readFileSync(process.env.CODE_GS, 'utf8') + '\n;this.__api = { setup, getInitData, saveDraft, saveVisit, doGet };', ctx);
+  vm.runInContext(fs.readFileSync(process.env.CODE_GS, 'utf8') + '\n;this.__api = { setup, getInitData, saveDraft, saveVisit, doGet, login, myData };', ctx);
 
   function path(id) {
     const out = []; let p = id;
     while (p && folders[p] && folders[p].name !== 'ROOT') { out.unshift(folders[p].name); p = folders[p].parent; }
     return out.join('/');
   }
+  // 시험용: 활동가 계정 추가 → 로그인 증표 받기
+  ctx.__addAcc = (name, team, pin) => {
+    const sh = ctx.accountSheet_(ctx.ensureStorage_().ss);
+    sh.getRange(sh.getLastRow() + 1, 1, 1, 4).setValues([[name, team || '', pin || '1111', 'O']]);
+  };
+  const tokens = {};
+  function authFor(name, team) {
+    if (!tokens[name]) {
+      ctx.__addAcc(name, team, '1111');
+      tokens[name] = ctx.__api.login({ name, pin: '1111' }).token;
+    }
+    return { name, token: tokens[name] };
+  }
+  if (opts.autoAuth !== false) {
+    const raw = { saveVisit: ctx.__api.saveVisit, saveDraft: ctx.__api.saveDraft };
+    ['saveVisit', 'saveDraft'].forEach(fn => {
+      ctx.__api[fn] = r => raw[fn](r && !r.auth && r.author ? Object.assign({}, r, { auth: authFor(r.author, r.team) }) : r);
+    });
+  }
+  ctx.__api.addAccount = (n, t, p) => ctx.__addAcc(n, t, p);
   return { fetchCount, api: ctx.__api, files, folders, docs, spreadsheets, props, path, log: ctx._log };
 }
 module.exports = { makeEnv };

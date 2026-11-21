@@ -65,6 +65,7 @@ function makeEnv(opts = {}) {
           getDisplayValue: () => String(rng.getValues()[0][0]),
           setNumberFormat: f => { for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) fmt[(r0 + i) + ',' + (c0 + j)] = f; return rng; },
           setFontWeight: () => rng, setBackground: () => rng,
+          setDataValidation: dv => { sh.dv = dv; return rng; },
           setFormula: f => { sh.formulas[r0 + ',' + c0] = f; return rng; },
           getRow: () => r0,
           createTextFinder: text => ({ matchEntireCell: () => ({ findNext: () => {
@@ -79,6 +80,8 @@ function makeEnv(opts = {}) {
   }
   const spreadsheets = {};
   const SpreadsheetApp = {
+    newDataValidation: () => { const r = {}; const b = { requireValueInList: (l) => { r.list = l; return b; },
+      setAllowInvalid: () => b, build: () => r }; return b; },
     newConditionalFormatRule: () => { const r = {}; const b = {
       whenFormulaSatisfied: f => { r.formula = f; return b; }, setBackground: c => { r.bg = c; return b; },
       setRanges: x => { r.ranges = x; return b; }, build: () => r }; return b; },

@@ -132,6 +132,11 @@
   .info-card { background: var(--brand-soft); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
   .info-card h3 { margin: 0 0 6px; font-size: 19px; }
   .empty-note { color: var(--muted); padding: 12px 4px; }
+  .badge { display: inline-block; font-size: 15px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+    background: var(--muted); color: var(--card); vertical-align: middle; }
+  .elder-btn.closed { opacity: .75; }
+  .closed-head { margin: 22px 0 10px; font-size: 19px; color: var(--muted); }
+  .closed-note { background: var(--bg); border: 2px dashed var(--line); border-radius: 12px; padding: 10px 12px; margin: 0 0 14px; color: var(--muted); }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -246,7 +251,7 @@ const TEAMS = ['따품안', '임종하면', '해바라기', '햇살동행'];
  *  showIf: 다른 항목이 특정 값일 때만 보임
  * ===================================================================== */
 const KIND = { name: '방문기록지', filePrefix: '생애말기활동가기록지', docTitle: '생애말기활동가기록지' };
-const UI_VERSION = '2026-11-21'; // 화면 버전 (GitHub에서 고치면 올림)
+const UI_VERSION = '2026-11-21c'; // 화면 버전 (GitHub에서 고치면 올림)
 const FORM = [
   { key: 'date', label: '방문날짜', type: 'date', required: true },
   { key: 'time', label: '활동 시간', type: 'timerange', required: true, hint: '시작한 시간과 끝난 시간을 넣어 주세요' },
@@ -262,6 +267,8 @@ const FORM = [
     options: ['의료진', '사회복지사', '대상자 가족', '없음'], exclusive: '없음', danger: true },
   { key: 'noticeNote', label: '전달 내용', type: 'memo', required: true, showIf: () => hasNotice(),
     hint: '전달할 내용을 적어 주세요' },
+  { key: 'supplies', label: '지급물품', type: 'multi', hint: '오늘 드린 물품을 눌러 주세요',
+    options: ['돌봄키트', '활동가키트', '없음'], exclusive: '없음' },
   { key: 'nextVisit', label: '다음 방문 날짜', type: 'date', quick: [7, 14] },
   { key: 'memo', label: '활동 내용·특이사항', type: 'memo',
     phrases: ['말벗 해드림.', '손 마사지 해드림.', '산책 함께 함.', '가족과 이야기 나눔.', '특이사항 없음.'] }
@@ -510,7 +517,7 @@ function onPhrase(e) {
 /* ---------- 전에 만난 어르신 ---------- */
 function renderElderChips() {
   if (authMode && mineData) {
-    const names = mineData.elders.map(e => e.name).slice(0, 8);
+    const names = mineData.elders.filter(e => !isClosed(e)).map(e => e.name).slice(0, 8);
     $('elderChips').innerHTML = names.map(n => `<button type="button" class="chip" data-elder="${esc(n)}">${esc(n)}</button>`).join('');
     $('elderHint').hidden = !names.length;
     return;
@@ -654,6 +661,9 @@ function loadMine() {
 
 /* ---------- 내 기록 (요약본) ---------- */
 let mineSub = 'recs';
+// 종결 여부: 새 서버는 closed, 옛 서버는 기초정보의 '상태' 칸으로 판단
+function isClosed(e) { return !!e.closed || (e.info || []).some(f => f.label === '상태' && /종결/.test(f.value)); }
+function closedOn(e) { return e.closedOn || ((e.info || []).find(f => f.label === '종결일') || {}).value || ''; }
 function dateText(v) { const t = pickText('date', v); return v ? t : ''; }
 function recCard(x, showAuthor) {
   const row = (k, v, cls) => v ? `<dt>${k}</dt><dd${cls ? ` class="${cls}"` : ''}>${esc(v)}</dd>` : '';
@@ -663,7 +673,7 @@ function recCard(x, showAuthor) {
     <dl>${row('활동 시간', x.time)}${row('대화상대', x.partner)}${row('기분·상태', x.mood)}
       ${row('스스로 가능', x.selfCare)}${row('불편한 것', x.discomfort)}
       ${notice ? row('전달', x.notice + (x.noticeNote ? ' — ' + x.noticeNote : ''), 'alert') : ''}
-      ${row('활동 내용', x.memo)}${row('다음 방문', x.nextVisit ? dateText(x.nextVisit) : '')}
+      ${row('활동 내용', x.memo)}${x.supplies && x.supplies !== '없음' ? row('지급물품', x.supplies) : ''}${row('다음 방문', x.nextVisit ? dateText(x.nextVisit) : '')}
       ${x.status && x.status !== '전송완료' ? row('상태', x.status) : ''}</dl>
   </article>`;
 }
@@ -674,20 +684,24 @@ function renderMine() {
   document.querySelectorAll('.sub-tabs [data-sub]').forEach(b => b.setAttribute('aria-pressed', b.dataset.sub === mineSub));
   $('recsBox').hidden = mineSub !== 'recs'; $('eldersBox').hidden = mineSub !== 'elders';
   if (!d) { $('recsBox').innerHTML = '<p class="empty-note">불러오는 중…</p>'; return; }
-  $('cntRecs').textContent = d.mine.length; $('cntElders').textContent = d.elders.length;
+  const open = d.elders.filter(e => !isClosed(e)), closed = d.elders.filter(isClosed);
+  $('cntRecs').textContent = d.mine.length; $('cntElders').textContent = open.length;
   $('recsBox').innerHTML = d.mine.length ? d.mine.map(x => recCard(x, false)).join('')
     : '<p class="empty-note">아직 보낸 기록이 없습니다.</p>';
-  $('eldersBox').innerHTML = d.elders.length ? d.elders.map((e, i) => `<button type="button" class="rec elder-btn" data-elder-i="${i}">
-      <div class="r-top"><span>${esc(e.name)} 어르신</span><span class="go">보기 ›</span></div>
+  const card = e => { const i = d.elders.indexOf(e), c = isClosed(e); return `<button type="button" class="rec elder-btn${c ? ' closed' : ''}" data-elder-i="${i}">
+      <div class="r-top"><span>${esc(e.name)} 어르신${c ? ' <span class="badge">종결</span>' : ''}</span><span class="go">보기 ›</span></div>
       <dl><dt>최근 방문</dt><dd>${esc(e.last ? dateText(e.last) : '아직 없음')}</dd><dt>방문 기록</dt><dd>${e.count}건</dd>
-      ${e.helpers ? `<dt>담당</dt><dd>${esc(e.helpers)}</dd>` : ''}</dl></button>`).join('')
-    : '<p class="empty-note">맡은 어르신이 아직 없습니다.</p>';
+      ${e.helpers ? `<dt>담당</dt><dd>${esc(e.helpers)}</dd>` : ''}${c && closedOn(e) ? `<dt>종결일</dt><dd>${esc(closedOn(e))}</dd>` : ''}</dl></button>`; };
+  $('eldersBox').innerHTML = (open.length ? open.map(card).join('') : '<p class="empty-note">맡은 어르신이 아직 없습니다.</p>')
+    + (closed.length ? `<h3 class="closed-head">종결된 어르신 (${closed.length})</h3>` + closed.map(card).join('') : '');
 }
 function openElder(i) {
   const e = mineData.elders[i];
   if (!e) return;
-  const info = (e.info || []).map(f => `<dt>${esc(f.label)}</dt><dd>${esc(f.value)}</dd>`).join('');
-  $('elderBox').innerHTML = `<h2 style="margin:0 0 12px;font-size:24px">${esc(e.name)} 어르신</h2>
+  const c = isClosed(e);
+  const info = (e.info || []).filter(f => f.label !== '상태' && f.label !== '종결일').map(f => `<dt>${esc(f.label)}</dt><dd>${esc(f.value)}</dd>`).join('');
+  $('elderBox').innerHTML = `<h2 style="margin:0 0 12px;font-size:24px">${esc(e.name)} 어르신${c ? ' <span class="badge">종결</span>' : ''}</h2>
+    ${c ? `<p class="closed-note">돌봄이 종결된 어르신입니다${closedOn(e) ? ' (' + esc(closedOn(e)) + ')' : ''}. 지난 기록만 볼 수 있습니다.</p>` : ''}
     <div class="info-card"><h3>📌 기초정보 <small style="font-weight:400;color:var(--muted)">(사회복지사 작성)</small></h3>
       ${info ? `<dl class="rec" style="border:0;padding:0;margin:0;background:none"><div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px">${info}</div></dl>` : '<p class="empty-note" style="padding:0">아직 입력된 기초정보가 없습니다.</p>'}</div>
     <h3 style="margin:0 0 10px">🗓 방문 내역 (${e.count}건, 최근 순)</h3>
@@ -705,24 +719,27 @@ function demoServer(fn, arg, ok, fail) {
 function DEMO_MINE(me) {
   const v = (date, author, elder, o) => Object.assign({ id: date + author, date, author, elder, status: '전송완료' }, o);
   const a = [
-    v('2026-11-19', me, '박○순', { time: '1시간', partner: '대상자 본인, 자녀', mood: '활발', selfCare: '식사, 화장실', memo: '옛날 사진 보며 이야기 나눔. 말벗 해드림. 손 마사지 해드림.', notice: '없음', nextVisit: '2026-11-26' }),
+    v('2026-11-19', me, '박○순', { time: '1시간', partner: '대상자 본인, 자녀', mood: '활발', selfCare: '식사, 화장실', memo: '옛날 사진 보며 이야기 나눔. 말벗 해드림. 손 마사지 해드림.', notice: '없음', supplies: '돌봄키트', nextVisit: '2026-11-26' }),
     v('2026-11-17', '정○희', '박○순', { time: '45분', partner: '대상자 본인', mood: '통증', discomfort: '무릎 통증', notice: '의료진', noticeNote: '무릎 통증이 심해졌다고 하심. 진통제 복용 여부 확인 부탁', memo: '찬송가 함께 부름.' }),
     v('2026-11-12', me, '박○순', { time: '50분', partner: '요양보호사', mood: '수면, 무기력', selfCare: '수면·휴식', discomfort: '잠을 오래 주무심', notice: '없음', memo: '주무셔서 요양보호사와 이야기 나눔.' }),
+    v('2026-10-20', me, '한○분', { time: '40분', partner: '자녀', mood: '수면', notice: '없음', memo: '가족과 이야기 나눔.' }),
     v('2026-11-18', me, '최○길', { time: '35분', partner: '대상자 본인, 배우자', mood: '우울', discomfort: '입맛이 없으심', notice: '사회복지사', noticeNote: '식사량이 줄었다고 배우자분이 걱정하심', memo: '산책 함께 함. 가족과 이야기 나눔.', nextVisit: '2026-11-25' })
   ];
   const mine = a.filter(x => x.author === me).sort((x, y) => y.date.localeCompare(x.date));
   const group = n => a.filter(x => x.elder === n).sort((x, y) => y.date.localeCompare(x.date));
   return { name: me, team: '햇살동행', mine, elders: [
     { name: '박○순', last: '2026-11-19', count: 3, helpers: me + ', 정○희', visits: group('박○순'), info: [
-      { label: '성별·나이', value: '여 · 88세' }, { label: '사는 곳', value: '○○동 (아파트 3층, 엘리베이터 있음)' },
+      { label: '성별', value: '여' }, { label: '나이', value: '88세' }, { label: '사는 곳', value: '○○동 (아파트 3층, 엘리베이터 있음)' },
       { label: '주요 질환·건강', value: '퇴행성 관절염, 고혈압. 귀가 어두우심(왼쪽)' }, { label: '가족·보호자', value: '딸(주보호자, 근처 거주), 아들(타지역)' },
       { label: '돌봄 상황', value: '요양보호사 오전 3시간, 재택의료 월 1회' }, { label: '주의할 점', value: '오른쪽에서 크게 천천히 말씀드리기. 낙상 주의' },
       { label: '전달 메모', value: '옛날 사진·찬송가 좋아하심' }] },
     { name: '최○길', last: '2026-11-18', count: 1, helpers: me, visits: group('최○길'), info: [
-      { label: '성별·나이', value: '남 · 91세' }, { label: '주요 질환·건강', value: '폐암 말기, 산소 사용' },
+      { label: '성별', value: '남' }, { label: '나이', value: '91세' }, { label: '주요 질환·건강', value: '폐암 말기, 산소 사용' },
       { label: '가족·보호자', value: '배우자와 둘이 거주' }, { label: '주의할 점', value: '산소줄 주의. 담배·불 가까이 금지' }] },
+    { name: '한○분', last: '2026-10-20', count: 1, helpers: me, closed: true, closedOn: '2026-10-31', visits: group('한○분'), info: [
+      { label: '성별', value: '여' }, { label: '나이', value: '93세' }] },
     { name: '이○자', last: '', count: 0, helpers: me, visits: [], info: [
-      { label: '성별·나이', value: '여 · 84세' }, { label: '돌봄 상황', value: '다음 주 첫 방문 예정' }] }
+      { label: '성별', value: '여' }, { label: '나이', value: '84세' }, { label: '돌봄 상황', value: '다음 주 첫 방문 예정' }] }
   ] };
 }
 

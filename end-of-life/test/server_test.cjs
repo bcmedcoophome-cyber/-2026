@@ -52,7 +52,7 @@ E.api.saveDraft(rec('x1', { kind: '전체목록' }));
 assert.equal(rows(det).length, 2);
 // getInitData
 const init = E.api.getInitData();
-assert.equal(init.version, '2026-11-21');
+assert.equal(init.version, '2026-11-21c');
 assert.deepEqual(init.elders, [], '저장된 정보는 화면으로 보내지 않음');
 assert.ok(!('docUrl' in E.api.saveVisit(rec('a1'))), '문서 주소도 보내지 않음');
 // 필수값
@@ -148,7 +148,9 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   const C = makeEnv(); C.api.setup();
   const mk = (id, author, elder, date, memo) => Object.assign(rec(id, { author, team: '햇살동행', meta: { elder, date }, alerts: [] }),
     { sections: [{ title: '활동 내용', items: [{ label: '대화상대', value: '자녀' }, { label: '활동 내용·특이사항', value: memo }, { label: '활동 시간', value: '30분' }] }] });
-  C.api.saveVisit(mk('c1', '김은아', '이정임', '2026-11-01', '말벗 해드림.'));
+  const c1 = mk('c1', '김은아', '이정임', '2026-11-01', '말벗 해드림.');
+  c1.sections[0].items.push({ label: '지급물품', value: '돌봄키트, 활동가키트' });
+  C.api.saveVisit(c1);
   C.api.saveVisit(mk('c2', '양승미', '이정임.', '2026-11-03', '가'.repeat(200)));  // 같은 어르신(점 붙음), 다른 활동가
   C.api.saveVisit(mk('c3', '양승미', '윤묘섭', '2026-11-04', '남의 어르신'));
   const ss = Object.values(C.spreadsheets)[0];
@@ -159,10 +161,12 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   let d = C.api.myData({ name: '김은아', token: tok });
   const infoSh = ss.getSheetByName('어르신기초정보');
   assert.ok(infoSh, '기초정보 탭 자동 생성');
-  infoSh.cells.push(['김새분', '김은아, 양승미', '여 · 90세', '', '고혈압', '', '', '낙상 주의', '']);
-  infoSh.cells.push(['윤묘섭', '양승미', '남 · 80세', '', '', '', '', '', '']);
+  const put = o => infoSh.cells.push(infoSh.cells[0].map(h => o[h] || ''));
+  put({ '어르신 이름': '김새분', '담당 활동가1': '김은아', '담당 활동가2': '양승미', '성별': '여', '나이': '90세', '주요 질환·건강': '고혈압', '주의할 점': '낙상 주의' });
+  put({ '어르신 이름': '윤묘섭', '담당 활동가1': '양승미', '성별': '남' });
   d = C.api.myData({ name: '김은아', token: tok });
   assert.deepEqual(d.mine.map(x => x.id), ['c1']);
+  assert.equal(d.mine[0].supplies, '돌봄키트, 활동가키트');
   const names = d.elders.map(e => e.name).sort();
   assert.deepEqual(names, ['김새분', '이정임'], '방문한 어르신 + 담당 어르신, 남의 어르신 제외');
   const ej = d.elders.find(e => e.name === '이정임');
@@ -170,8 +174,18 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   assert.ok(ej.visits[0].memo.length <= 81 && ej.visits[0].memo.endsWith('…'), '요약본');
   const ks = d.elders.find(e => e.name === '김새분');
   assert.equal(ks.count, 0);
-  assert.deepEqual(ks.info.map(f => f.label), ['성별·나이', '주요 질환·건강', '주의할 점'], '빈 칸은 안 보냄');
+  assert.deepEqual(ks.info.map(f => f.label), ['성별', '나이', '주요 질환·건강', '주의할 점'], '빈 칸은 안 보냄');
   assert.equal(ks.helpers, '김은아, 양승미');
+  // 예전 탭에도 상태·종결일 칸이 붙고, 종결 표시는 closed로
+  const ih = infoSh.cells[0];
+  assert.ok(ih.includes('상태') && ih.includes('종결일'), '상태·종결일 칸');
+  const row = infoSh.cells.find(r => r[0] === '김새분');
+  row[ih.indexOf('상태')] = '종결'; row[ih.indexOf('종결일')] = '2026-11-20';
+  d = C.api.myData({ name: '김은아', token: tok });
+  const ks2 = d.elders.find(e => e.name === '김새분');
+  assert.equal(ks2.closed, true); assert.equal(ks2.closedOn, '2026-11-20');
+  assert.ok(!ks2.info.some(f => f.label === '상태' || f.label === '종결일'), '상태는 info에서 빠짐');
+  assert.equal(d.elders[d.elders.length - 1].name, '김새분', '종결은 맨 뒤');
   // 특수 탭 보호
   C.api.saveDraft(Object.assign(mk('c9', '김은아', 'x', '2026-11-05', 'y'), { kind: '활동가계정' }));
   assert.ok(!ss.getSheetByName('활동가계정').cells.some(r => r[0] === 'c9'));
@@ -186,5 +200,60 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   const acc = ss.getSheetByName('활동가계정');
   assert.ok(acc && acc.cells.some(r => r[0] === '이명옥' && /^\d{6}$/.test(r[2])), '앱 열면 계정 탭 + 비밀번호');
   assert.ok(ss.getSheetByName('어르신기초정보'), '앱 열면 기초정보 탭');
+}
+{
+  // 예전 칸 구성(담당 활동가 한 칸, 성별·나이 한 칸, 오른쪽 사용법)에 입력해 둔 내용 → 새 칸으로 자동 옮김
+  const O = makeEnv(); O.api.setup();
+  O.api.saveVisit(rec('o1', { author: '김은아' }));
+  const ss = Object.values(O.spreadsheets)[0];
+  const old = ss.insertSheet('어르신기초정보');
+  old.cells.push(['어르신 이름', '담당 활동가', '성별·나이', '사는 곳', '주요 질환·건강', '가족·보호자', '돌봄 상황', '주의할 점', '전달 메모', '', '사용법']);
+  old.cells.push(['박옛날', '김은아, 이명옥', '여 · 88세', '○○동', '', '', '', '낙상 주의', '', '', '· 한 어르신 = 한 줄']);
+  old.cells.push(['허준녀', '', '여', '', '', '', '', '', '', '', '· 담당 활동가로']);
+  old.cells.push(['채원근', '', '남', '', '', '', '', '', '', '', '']);
+  const tok = O.api.login({ name: '김은아', pin: '1111' }).token;
+  let d = O.api.myData({ name: '김은아', token: tok });
+  const H = old.cells[0];
+  assert.deepEqual(H.slice(0, 7), ['어르신 이름', '담당 활동가1', '담당 활동가2', '상태', '종결일', '성별', '나이']);
+  const row = n => Object.fromEntries(H.map((h, i) => [h, old.cells.find(r => r[0] === n)[i]]));
+  assert.equal(row('박옛날')['담당 활동가1'], '김은아'); assert.equal(row('박옛날')['담당 활동가2'], '이명옥');
+  assert.equal(row('박옛날')['성별'], '여'); assert.equal(row('박옛날')['나이'], '88세');
+  assert.equal(row('박옛날')['사는 곳'], '○○동'); assert.equal(row('박옛날')['주의할 점'], '낙상 주의');
+  assert.equal(row('허준녀')['성별'], '여'); assert.equal(row('채원근')['성별'], '남');
+  assert.equal(old.cells.filter(r => r[0] && r[0] !== '어르신 이름' && r[0] !== '' && !/^·|사용법/.test(r[0])).length, 3, '21분 그대로(여기선 3분)');
+  assert.ok(!H.includes('성별·나이') && !H.includes('담당 활동가'));
+  const e = d.elders.find(x => x.name === '박옛날');
+  assert.ok(e, '담당 활동가1에 있으니 보임');
+  assert.deepEqual(e.info.map(f => f.label + '=' + f.value), ['성별=여', '나이=88세', '사는 곳=○○동', '주의할 점=낙상 주의']);
+  assert.ok(!e.info.some(f => /사용법|·/.test(f.label + f.value)), '사용법 안 섞임');
+  // 담당 활동가2로도 보임, 종결
+  const t2 = (O.api.addAccount('이명옥', '따품안', '2222'), O.api.login({ name: '이명옥', pin: '2222' }).token);
+  assert.ok(O.api.myData({ name: '이명옥', token: t2 }).elders.some(x => x.name === '박옛날'), '담당 활동가2');
+  old.cells.find(r => r[0] === '채원근')[H.indexOf('담당 활동가1')] = '김은아';
+  old.cells.find(r => r[0] === '채원근')[H.indexOf('상태')] = '종결';
+  d = O.api.myData({ name: '김은아', token: tok });
+  assert.equal(d.elders.find(x => x.name === '채원근').closed, true);
+  // 두 번째에는 다시 옮기지 않음(그대로)
+  const snap = JSON.stringify(old.cells);
+  O.api.myData({ name: '김은아', token: tok });
+  assert.equal(JSON.stringify(old.cells), snap);
+}
+{
+  // 사람이 만든 다른 탭(예: 박남식용)은 건드리지 않음
+  const P = makeEnv(); P.api.setup();
+  const ss = Object.values(P.spreadsheets)[0];
+  const other = ss.insertSheet('박남식용');
+  other.cells.push(['', '', '']); other.cells.push(['봉사활동 등록 관리', '', '']); other.cells.push(['활동가', '방문날짜', '대상 어르신']);
+  other.cells.push(['심윤재', '2026-10-27', '허준녀']);
+  const before = JSON.stringify(other.cells);
+  P.api.saveVisit(rec('p1'));
+  P.api.getInitData();
+  ss.getSheetByName('중요키워드').cells.push(['높음', '새키워드', '']);
+  P.api.saveDraft(rec('p2'));
+  assert.equal(JSON.stringify(other.cells), before, '다른 탭 그대로');
+  // 한글 조합 방식이 달라도 같은 이름
+  const nfd = '이명옥'.normalize('NFD');
+  const tk = P.api.login({ name: nfd, pin: '1111' });
+  assert.equal(tk.name, '이명옥');
 }
 console.log('서버 시험 모두 통과');

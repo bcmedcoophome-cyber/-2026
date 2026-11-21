@@ -7,7 +7,9 @@ const SHOT = __dirname + '/shots';
 fs.mkdirSync(SHOT, { recursive: true });
 
 (async () => {
-  const E = makeEnv(); E.api.setup();
+  const E = makeEnv({ autoAuth: false }); E.api.setup();
+  E.api.addAccount('이명옥', '따품안', '1234');
+  E.api.addAccount('윤서연', '햇살동행', '5678');
   let offline = false;
   const calls = [];
   const browser = await chromium.launch();
@@ -40,17 +42,23 @@ fs.mkdirSync(SHOT, { recursive: true });
   // 가로 스크롤 없음
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 
-  // 1. 팀 → 이름
-  await page.click('#teamChips .chip[data-team="따품안"]');
-  const h = await page.locator('#teamChips .chip').first().boundingBox();
+  // 1. 로그인 (처음엔 로그인 화면만)
+  assert.ok(await page.locator('#loginMain').isVisible(), '로그인 화면');
+  assert.ok(await page.locator('#writeMain').isHidden());
+  await page.screenshot({ path: SHOT + '/0-login.png' });
+  await page.click('#loginBtn');
+  assert.match(await page.textContent('#loginErr'), /넣어 주세요/);
+  await page.fill('#loginName', '이명옥'); await page.fill('#loginPin', '0000'); await page.click('#loginBtn');
+  await page.waitForTimeout(300);
+  assert.match(await page.textContent('#loginErr'), /맞지 않습니다/);
+  await page.fill('#loginPin', '1234'); await page.press('#loginPin', 'Enter');
+  await page.waitForTimeout(400);
+  assert.ok(await page.locator('#writeMain').isVisible(), '로그인 후 기록 화면');
+  const h = await page.locator('#saveBtn').boundingBox();
   assert.ok(h.height >= 56, '버튼 높이 ' + h.height);
-  assert.ok(await page.locator('#meInput').isVisible(), '팀 누르면 이름 칸');
-  await page.screenshot({ path: SHOT + '/0-name.png' });
-  await page.click('#meOk');
-  assert.ok(await page.locator('#errBanner.show').count(), '빈 이름 막음');
-  await page.fill('#meInput', ' 이명옥 ');
-  await page.click('#meOk');
   assert.equal(await page.textContent('#meName'), '이명옥');
+  assert.equal(await page.textContent('#meTeam'), '따품안 팀');
+  assert.ok(await page.locator('#pickBox').isHidden(), '팀·이름 고르기 없음');
   assert.equal(await page.inputValue('#f-date'), new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
 
   // 저장: 어르신 이름 없으면 빨간 칸
@@ -165,7 +173,7 @@ fs.mkdirSync(SHOT, { recursive: true });
   assert.equal(Object.keys(E.docs).length, 2);
   // 같은 기록 다시 보내도 중복 없음
   const queued = { id: R2[0] };
-  const again = E.api.saveVisit({ id: queued.id, author: '이명옥', meta: { elder: '홍길동', date: '2026-10-25' }, items: [] });
+  const again = E.api.saveVisit({ id: queued.id, author: '이명옥', meta: { elder: '홍길동', date: '2026-10-25' }, items: [], auth: { name: '이명옥', token: E.api.login({ name: '이명옥', pin: '1234' }).token } });
   assert.ok(again.duplicate);
 
   // NEW: 쓰던 기록 보관 → 목록 → 두 번 눌러 지우기
@@ -181,18 +189,34 @@ fs.mkdirSync(SHOT, { recursive: true });
   assert.equal(await page.locator('.saved-item').count(), 0);
   await page.click('#savedCloseBtn');
 
-  // 이름 바꾸기
+  // 내 기록 (요약본)
+  await page.click('[data-view="mine"]'); await page.waitForTimeout(500);
+  assert.ok(await page.locator('#mineMain').isVisible());
+  assert.ok(await page.locator('#writeFooter').isHidden(), '내 기록에서는 아래 버튼 숨김');
+  assert.equal(await page.locator('#recsBox .rec').count(), 2, '내가 보낸 2건');
+  assert.match(await page.textContent('#recsBox'), /홍길동/);
+  await page.click('[data-sub="elders"]');
+  assert.equal(await page.locator('#eldersBox .elder-btn').count(), 1);
+  await page.click('[data-elder-i="0"]');
+  assert.match(await page.textContent('#elderBox'), /방문 내역 \(2건/);
+  await page.screenshot({ path: SHOT + '/8-elder.png', fullPage: true });
+  await page.click('#elderBack');
+  await page.click('[data-view="write"]');
+
+  // 로그아웃(두 번 눌러야) → 다른 활동가로 로그인
   await page.click('#changeMe');
-  assert.ok(await page.locator('#pickBox').isVisible());
-  assert.equal(await page.textContent('#meName'), '');
-  await page.click('#teamChips .chip[data-team="햇살동행"]');
-  assert.equal(await page.inputValue('#meInput'), '이명옥', '바꾸기 때 이전 이름 채워짐');
-  await page.fill('#meInput', '윤서연');
-  await page.press('#meInput', 'Enter');
+  assert.ok(await page.locator('#writeMain').isVisible(), '한 번은 로그아웃 안 됨');
+  await page.click('#changeMe');
+  assert.ok(await page.locator('#loginMain').isVisible());
+  await page.fill('#loginName', '윤서연'); await page.fill('#loginPin', '5678'); await page.click('#loginBtn');
+  await page.waitForTimeout(500);
   assert.equal(await page.textContent('#meTeam'), '햇살동행 팀');
   assert.equal(await page.locator('#elderChips .chip').count(), 0, '다른 활동가에겐 남의 어르신 안 보임');
+  await page.click('[data-view="mine"]'); await page.waitForTimeout(400);
+  assert.equal(await page.locator('#recsBox .rec').count(), 0);
+  await page.click('[data-view="write"]');
 
-  assert.match(await page.textContent('#footState'), /서버 2026-11-01/);
+  assert.match(await page.textContent('#footState'), /서버 2026-11-21/);
   assert.deepEqual(errors, []);
 
   // 미리보기(구글 밖) 모드에서도 오류 없이 열림

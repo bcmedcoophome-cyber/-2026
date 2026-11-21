@@ -52,7 +52,7 @@ E.api.saveDraft(rec('x1', { kind: '전체목록' }));
 assert.equal(rows(det).length, 2);
 // getInitData
 const init = E.api.getInitData();
-assert.equal(init.version, '2026-11-01');
+assert.equal(init.version, '2026-11-21');
 assert.deepEqual(init.elders, [], '저장된 정보는 화면으로 보내지 않음');
 assert.ok(!('docUrl' in E.api.saveVisit(rec('a1'))), '문서 주소도 보내지 않음');
 // 필수값
@@ -107,5 +107,84 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   assert.ok(!list.unformatted, '@ 서식');
   K.api.saveDraft(mk('x9', [{ label: '활동 내용·특이사항', value: '해킹' }], { kind: '중요키워드' }));
   assert.equal(kw.cells.filter(r => r[0] === 'x9').length, 0, '키워드 탭 보호');
+}
+// ---- 계정·로그인·내 기록 ----
+{
+  const A = makeEnv({ autoAuth: false }); A.api.setup();
+  const raw = (id, extra = {}) => Object.assign(rec(id), extra);
+  // 로그인 없이 저장 불가
+  assert.throws(() => A.api.saveVisit(raw('n1')), /로그인이 필요/);
+  // 계정 탭: 처음엔 기존 기록 활동가로 자동 생성 + 비밀번호 자동 발급
+  const B = makeEnv(); B.api.setup();
+  B.api.saveVisit(rec('b1'));                       // 이명옥(자동 계정)
+  const ssB = Object.values(B.spreadsheets)[0];
+  const acc = ssB.getSheetByName('활동가계정');
+  assert.ok(acc, '계정 탭');
+  // 새 활동가: 이름만 적으면 비밀번호 자동
+  acc.cells.push(['박새로', '해바라기', '', 'O']);
+  assert.throws(() => B.api.login({ name: '박새로', pin: '0000' }), /맞지 않습니다/);
+  const pin = acc.cells.find(r => r[0] === '박새로')[2];
+  assert.match(pin, /^\d{6}$/, '자동 비밀번호');
+  const t = B.api.login({ name: ' 박 새로 ', pin });
+  assert.equal(t.name, '박새로'); assert.equal(t.team, '해바라기'); assert.ok(t.token);
+  // 작성자는 계정으로 고정 (화면에서 다른 이름을 보내도)
+  B.api.saveVisit(Object.assign(rec('b2', { author: '가짜이름', team: 'x', meta: { elder: '홍길동', date: '2026-11-02' } }), { auth: { name: '박새로', token: t.token } }));
+  const L = rows(ssB.getSheetByName('전체목록'));
+  assert.equal(L[1]['활동가'], '박새로'); assert.equal(L[1]['팀'], '해바라기');
+  // 틀린 증표 / 사용 X / 비밀번호 변경 → 다시 로그인
+  assert.throws(() => B.api.myData({ name: '박새로', token: 'zzz' }), /로그인이 필요/);
+  acc.cells.find(r => r[0] === '박새로')[2] = '9999';
+  assert.throws(() => B.api.myData({ name: '박새로', token: t.token }), /로그인이 필요/, '비밀번호 바꾸면 증표 무효');
+  // 5번 틀리면 잠김
+  for (let i = 0; i < 5; i++) assert.throws(() => B.api.login({ name: '박새로', pin: '0000' }));
+  assert.throws(() => B.api.login({ name: '박새로', pin: '9999' }), /잠겼습니다/);
+  // 사용 X
+  B.api.addAccount('정막힘', '따품안', '2222');
+  acc.cells.find(r => r[0] === '정막힘')[3] = 'X';
+  assert.throws(() => B.api.login({ name: '정막힘', pin: '2222' }), /맞지 않습니다/);
+}
+{
+  // 내 기록: 내가 쓴 기록 + 내가 방문했거나 담당인 어르신의 방문 내역(같은 조 포함), 남의 어르신은 안 보임
+  const C = makeEnv(); C.api.setup();
+  const mk = (id, author, elder, date, memo) => Object.assign(rec(id, { author, team: '햇살동행', meta: { elder, date }, alerts: [] }),
+    { sections: [{ title: '활동 내용', items: [{ label: '대화상대', value: '자녀' }, { label: '활동 내용·특이사항', value: memo }, { label: '활동 시간', value: '30분' }] }] });
+  C.api.saveVisit(mk('c1', '김은아', '이정임', '2026-11-01', '말벗 해드림.'));
+  C.api.saveVisit(mk('c2', '양승미', '이정임.', '2026-11-03', '가'.repeat(200)));  // 같은 어르신(점 붙음), 다른 활동가
+  C.api.saveVisit(mk('c3', '양승미', '윤묘섭', '2026-11-04', '남의 어르신'));
+  const ss = Object.values(C.spreadsheets)[0];
+  // 기초정보: 사회복지사가 입력 (담당 활동가에 김은아)
+  C.api.addAccount('김은아2', '', '1'); // 계정 탭 존재 보장용
+  const info = ss.getSheetByName('어르신기초정보') || (C.api.myData && null);
+  const tok = C.api.login({ name: '김은아', pin: ss.getSheetByName('활동가계정').cells.find(r => r[0] === '김은아')[2] }).token;
+  let d = C.api.myData({ name: '김은아', token: tok });
+  const infoSh = ss.getSheetByName('어르신기초정보');
+  assert.ok(infoSh, '기초정보 탭 자동 생성');
+  infoSh.cells.push(['김새분', '김은아, 양승미', '여 · 90세', '', '고혈압', '', '', '낙상 주의', '']);
+  infoSh.cells.push(['윤묘섭', '양승미', '남 · 80세', '', '', '', '', '', '']);
+  d = C.api.myData({ name: '김은아', token: tok });
+  assert.deepEqual(d.mine.map(x => x.id), ['c1']);
+  const names = d.elders.map(e => e.name).sort();
+  assert.deepEqual(names, ['김새분', '이정임'], '방문한 어르신 + 담당 어르신, 남의 어르신 제외');
+  const ej = d.elders.find(e => e.name === '이정임');
+  assert.deepEqual(ej.visits.map(v => v.author), ['양승미', '김은아'], '같은 조 기록 포함, 최근 순');
+  assert.ok(ej.visits[0].memo.length <= 81 && ej.visits[0].memo.endsWith('…'), '요약본');
+  const ks = d.elders.find(e => e.name === '김새분');
+  assert.equal(ks.count, 0);
+  assert.deepEqual(ks.info.map(f => f.label), ['성별·나이', '주요 질환·건강', '주의할 점'], '빈 칸은 안 보냄');
+  assert.equal(ks.helpers, '김은아, 양승미');
+  // 특수 탭 보호
+  C.api.saveDraft(Object.assign(mk('c9', '김은아', 'x', '2026-11-05', 'y'), { kind: '활동가계정' }));
+  assert.ok(!ss.getSheetByName('활동가계정').cells.some(r => r[0] === 'c9'));
+}
+{
+  const T = makeEnv(); T.api.setup();
+  T.api.saveVisit(rec('t1'));
+  const ss = Object.values(T.spreadsheets)[0];
+  ss.sheets.splice(ss.sheets.findIndex(x => x.name === '활동가계정'), 1); // 아직 없다고 치고
+  T.props['EOL_TABS_READY'] && delete T.props['EOL_TABS_READY'];
+  T.api.getInitData();
+  const acc = ss.getSheetByName('활동가계정');
+  assert.ok(acc && acc.cells.some(r => r[0] === '이명옥' && /^\d{6}$/.test(r[2])), '앱 열면 계정 탭 + 비밀번호');
+  assert.ok(ss.getSheetByName('어르신기초정보'), '앱 열면 기초정보 탭');
 }
 console.log('서버 시험 모두 통과');

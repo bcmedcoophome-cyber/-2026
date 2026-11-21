@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '생애말기 활동기록';
-const APP_VERSION = '2026-11-01'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
+const APP_VERSION = '2026-11-21'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub의 이 앱 전용 브랜치 — main은 건드리지 않음)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/claude/end-of-life-record/end-of-life/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -57,6 +57,19 @@ const STATUS_DRAFT = '임시저장';
 const STATUS_SENT = '전송완료';
 const LINK_HEADER = '기록지';
 const DEFAULT_PREFIX = '생애말기활동가기록지';
+/* ---------- 활동가 계정: 이름 + 숫자 6자리 비밀번호 ----------
+ * 시트의 「활동가계정」 탭에서 관리합니다(처음에 지금까지 기록을 보낸 활동가로 자동 생성, 비밀번호 자동 발급).
+ * 새 활동가는 이름·팀만 적으면 다음 로그인 시도 때 비밀번호가 자동으로 채워집니다.
+ * '사용' 칸에 X를 적으면 로그인할 수 없습니다. */
+const ACCOUNT_SHEET = '활동가계정';
+const ACCOUNT_HEADERS = ['이름', '팀', '비밀번호', '사용', '메모'];
+const PROP_SECRET = 'EOL_SECRET';
+const MAX_FAILS = 5;          // 비밀번호 5번 틀리면
+const LOCK_SECONDS = 15 * 60; // 15분 잠금
+/* ---------- 어르신 기초정보: 사회복지사가 입력 → 담당 활동가에게만 보임 ---------- */
+const INFO_SHEET = '어르신기초정보';
+const INFO_HEADERS = ['어르신 이름', '담당 활동가', '성별·나이', '사는 곳', '주요 질환·건강', '가족·보호자', '돌봄 상황', '주의할 점', '전달 메모'];
+const SPECIAL_SHEETS = () => [LIST_SHEET, KEYWORD_SHEET, FOCUS_SHEET, ACCOUNT_SHEET, INFO_SHEET];
 const PROP_SHEET = 'EOL_SHEET_ID';
 const PROP_FOLDER = 'EOL_FOLDER_ID';
 
@@ -102,7 +115,99 @@ function setup() {
  * (전에 만난 어르신 목록은 각 휴대폰에 남은 기록으로만 보여 줌)
  */
 function getInitData() {
-  return { elders: [], version: APP_VERSION };
+  // 처음 한 번: 「활동가계정」(비밀번호 자동 발급)·「어르신기초정보」 탭을 바로 만들어 둠
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('EOL_TABS_READY')) {
+    const { ss } = ensureStorage_();
+    accountSheet_(ss);
+    readInfo_(ss);
+    props.setProperty('EOL_TABS_READY', '1');
+  }
+  return { elders: [], version: APP_VERSION, auth: true };
+}
+
+/** 로그인: { name, pin } → { ok, name, team, token } */
+function login(req) {
+  const name = normName_(req && req.name), pin = String((req && req.pin) || '').trim();
+  if (!name || !pin) throw new Error('이름과 비밀번호를 넣어 주세요.');
+  const cache = CacheService.getScriptCache();
+  const key = 'fail_' + Utilities.base64EncodeWebSafe(name);
+  const fails = +(cache.get(key) || 0);
+  if (fails >= MAX_FAILS) throw new Error('비밀번호를 여러 번 틀려서 15분 동안 잠겼습니다. 잠시 뒤에 다시 해 주세요.');
+  const { ss } = ensureStorage_();
+  const acc = findAccount_(ss, name);
+  if (!acc || acc.pin !== pin) {
+    cache.put(key, String(fails + 1), LOCK_SECONDS);
+    throw new Error('이름이나 비밀번호가 맞지 않습니다. (' + (fails + 1) + '/' + MAX_FAILS + ')');
+  }
+  cache.remove(key);
+  return { ok: true, name: acc.name, team: acc.team, token: token_(acc) };
+}
+
+/**
+ * 내 기록 보기 (요약본): auth = { name, token }
+ * → { name, team, mine:[요약], elders:[{ name, last, count, visits:[요약] }] }
+ *   mine: 내가 쓴 기록 / elders: 내가 한 번이라도 방문한 어르신의 방문 내역(같은 조 활동가 기록 포함)
+ */
+function myData(auth) {
+  const { ss } = ensureStorage_();
+  const acc = checkAuth_(ss, auth);
+  const all = [];
+  ss.getSheets().forEach(sh => {
+    if (SPECIAL_SHEETS().indexOf(sh.getName()) >= 0 || sh.getLastRow() < 2) return;
+    const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getDisplayValues();
+    const h = values[0].map(String);
+    const get = (row, name) => { const i = h.indexOf(name); return i >= 0 ? String(row[i] || '') : ''; };
+    if (h.indexOf('어르신 이름') < 0 || h.indexOf('활동가') < 0) return;
+    for (let r = 1; r < values.length; r++) {
+      const row = values[r];
+      if (!get(row, '기록ID') || !get(row, '어르신 이름')) continue;
+      all.push(summary_(sh.getName(), get));
+      function summary_(kind, g) {
+        return {
+          id: g(row, '기록ID'), kind: kind, status: g(row, '상태'),
+          date: g(row, '방문날짜'), elder: g(row, '어르신 이름'), author: g(row, '활동가'),
+          time: g(row, '활동 시간'), start: g(row, '시작 시간'), end: g(row, '끝 시간'),
+          partner: g(row, '대화상대'), mood: g(row, '대상자 기분·상태'),
+          selfCare: g(row, '스스로 가능한 것'), discomfort: short_(g(row, '가장 불편한 것'), 40),
+          notice: g(row, '필수 전달사항'), noticeNote: short_(g(row, '전달 내용'), 60),
+          memo: short_(g(row, '활동 내용·특이사항'), 80), nextVisit: g(row, '다음 방문 날짜')
+        };
+      }
+    }
+  });
+  const byDate = (a, b) => String(b.date).localeCompare(String(a.date));
+  const me = normName_(acc.name);
+  const mine = all.filter(x => normName_(x.author) === me).sort(byDate);
+  const myElders = {};
+  mine.forEach(x => { myElders[elderKey_(x.elder)] = 1; });
+  // 기초정보 탭에서 '담당 활동가'에 내 이름이 있는 어르신도 포함
+  const infos = readInfo_(ss);
+  const groups = {};
+  infos.forEach(inf => {
+    const mineToo = inf.helpers.some(h => normName_(h) === me);
+    if (!mineToo) return;
+    const k = elderKey_(inf.name);
+    myElders[k] = 1;
+    groups[k] = { name: inf.name, visits: [] };
+  });
+  all.filter(x => myElders[elderKey_(x.elder)]).forEach(x => {
+    const k = elderKey_(x.elder);
+    (groups[k] = groups[k] || { name: x.elder.replace(/[.\s]+$/, ''), visits: [] }).visits.push(x);
+  });
+  const infoBy = {};
+  infos.forEach(inf => { infoBy[elderKey_(inf.name)] = inf; });
+  const elders = Object.keys(groups).map(k => {
+    const g = groups[k], inf = infoBy[k];
+    g.visits.sort(byDate);
+    return {
+      name: g.name, last: g.visits.length ? g.visits[0].date : '', count: g.visits.length,
+      helpers: inf ? inf.helpers.join(', ') : '',
+      info: inf ? inf.fields : [],      // [{ label, value }] 사회복지사가 입력한 기초정보
+      visits: g.visits.slice(0, 30)
+    };
+  }).sort((a, b) => String(b.last).localeCompare(String(a.last)));
+  return { name: acc.name, team: acc.team, mine: mine.slice(0, 100), elders: elders };
 }
 
 /**
@@ -132,6 +237,10 @@ function upsertRecord_(record, final) {
   lock.waitLock(30000);
   try {
     const { folder, ss } = ensureStorage_();
+    const acc = checkAuth_(ss, record.auth);
+    record.author = acc.name; // 작성자는 로그인한 계정으로 고정
+    record.team = acc.team;
+    delete record.auth;
     const kind = kindOf_(record);
     const sh = getSheet_(ss, kind);
     const list = getSheet_(ss, LIST_SHEET, LIST_HEADERS);
@@ -185,6 +294,112 @@ function upsertRecord_(record, final) {
 
 /* ---------------- 내부 함수 ---------------- */
 
+function normName_(s) { return String(s || '').replace(/\s+/g, ''); }
+function elderKey_(s) { return String(s || '').replace(/[\s.]+/g, ''); }
+function short_(s, n) { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n) + '…' : s; }
+
+function secret_() {
+  const props = PropertiesService.getScriptProperties();
+  let s = props.getProperty(PROP_SECRET);
+  if (!s) { s = Utilities.getUuid() + Utilities.getUuid(); props.setProperty(PROP_SECRET, s); }
+  return s;
+}
+/** 로그인 증표: 이름+비밀번호로 만든 서명 (비밀번호를 바꾸면 다시 로그인해야 함) */
+function token_(acc) {
+  const sig = Utilities.computeHmacSha256Signature(normName_(acc.name) + '|' + acc.pin, secret_());
+  return Utilities.base64EncodeWebSafe(sig);
+}
+function checkAuth_(ss, auth) {
+  const acc = auth && auth.name ? findAccount_(ss, auth.name) : null;
+  if (!acc || !auth.token || token_(acc) !== auth.token) throw new Error('로그인이 필요합니다. 다시 로그인해 주세요.');
+  return acc;
+}
+
+/** 「활동가계정」 탭 (없으면 지금까지 기록을 보낸 활동가로 만들고, 빈 비밀번호는 자동 발급) */
+function accountSheet_(ss) {
+  let sh = ss.getSheetByName(ACCOUNT_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(ACCOUNT_SHEET);
+    const seen = {}, rows = [];
+    ss.getSheets().forEach(t => {
+      if (SPECIAL_SHEETS().indexOf(t.getName()) >= 0 || t.getLastRow() < 2) return;
+      const v = t.getRange(1, 1, t.getLastRow(), t.getLastColumn()).getDisplayValues();
+      const ai = v[0].indexOf('활동가'), ti = v[0].indexOf('팀');
+      if (ai < 0) return;
+      for (let r = 1; r < v.length; r++) {
+        const n = String(v[r][ai] || '').trim();
+        if (n && !seen[normName_(n)]) { seen[normName_(n)] = 1; rows.push([n, ti >= 0 ? v[r][ti] : '', '', 'O', '']); }
+      }
+    });
+    const all = [ACCOUNT_HEADERS].concat(rows);
+    const r = sh.getRange(1, 1, all.length, ACCOUNT_HEADERS.length);
+    r.setNumberFormat('@');
+    r.setValues(all);
+    const head = sh.getRange(1, 1, 1, ACCOUNT_HEADERS.length);
+    head.setFontWeight('bold');
+    head.setBackground('#e8f0fe');
+    sh.setFrozenRows(1);
+    sh.getRange(1, 7, 5, 1).setValues([['사용법'], ['· 활동가에게 이름과 비밀번호를 알려 주세요.'],
+      ['· 새 활동가: 이름·팀만 적으면 비밀번호가 자동으로 생깁니다.'], ['· 사용 칸에 X → 로그인 못 함.'],
+      ['· 비밀번호를 바꾸면 그 활동가는 다시 로그인해야 합니다.']]);
+  }
+  // 비밀번호가 빈 줄은 6자리 숫자로 채움
+  const last = sh.getLastRow();
+  if (last > 1) {
+    const pins = sh.getRange(2, 3, last - 1, 1).getDisplayValues();
+    const names = sh.getRange(2, 1, last - 1, 1).getDisplayValues();
+    let changed = false;
+    pins.forEach((p, i) => {
+      if (names[i][0] && !String(p[0]).trim()) { p[0] = String(100000 + Math.floor(Math.random() * 900000)); changed = true; }
+    });
+    if (changed) { const r = sh.getRange(2, 3, last - 1, 1); r.setNumberFormat('@'); r.setValues(pins); }
+  }
+  return sh;
+}
+
+/** 「어르신기초정보」 탭 (없으면 제목줄만 만듦) → [{ name, helpers:[], fields:[{label,value}] }] */
+function readInfo_(ss) {
+  let sh = ss.getSheetByName(INFO_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(INFO_SHEET);
+    const head = sh.getRange(1, 1, 1, INFO_HEADERS.length);
+    head.setValues([INFO_HEADERS]);
+    head.setFontWeight('bold');
+    head.setBackground('#e8f0fe');
+    sh.setFrozenRows(1);
+    sh.getRange(1, INFO_HEADERS.length + 2, 4, 1).setValues([['사용법'], ['· 한 어르신 = 한 줄. 담당 활동가는 쉼표로 여러 명(예: 이명옥, 심윤재)'],
+      ['· 담당 활동가로 적힌 사람만 앱의 「내 기록 → 내 어르신」에서 이 정보를 봅니다.'], ['· 칸을 비워 두면 그 항목은 앱에 나오지 않습니다.']]);
+    return [];
+  }
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  const v = sh.getRange(1, 1, last, sh.getLastColumn()).getDisplayValues();
+  const h = v[0].map(String);
+  const ni = h.indexOf('어르신 이름'), hi = h.indexOf('담당 활동가');
+  if (ni < 0) return [];
+  return v.slice(1).filter(r => String(r[ni]).trim()).map(r => ({
+    name: String(r[ni]).trim(),
+    helpers: hi >= 0 ? String(r[hi]).split(/[,，/·\s]+/).filter(Boolean) : [],
+    fields: h.map((label, i) => ({ label: label, value: String(r[i] || '').trim() }))
+      .filter((f, i) => f.label && i !== ni && i !== hi && f.value)
+  }));
+}
+
+function findAccount_(ss, name) {
+  const sh = accountSheet_(ss);
+  const last = sh.getLastRow();
+  if (last < 2) return null;
+  const n = normName_(name);
+  const rows = sh.getRange(2, 1, last - 1, 4).getDisplayValues();
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (normName_(r[0]) !== n) continue;
+    if (String(r[3]).trim().toUpperCase() === 'X' || !String(r[2]).trim()) return null;
+    return { name: String(r[0]).trim(), team: String(r[1]).trim(), pin: String(r[2]).trim() };
+  }
+  return null;
+}
+
 /** 「중요키워드」 탭을 읽음 (없으면 기본값으로 만듦) → [{ level, word }] */
 function loadKeywords_(ss) {
   let sh = ss.getSheetByName(KEYWORD_SHEET);
@@ -229,7 +444,7 @@ function refreshPriorityIfChanged_(ss, keywords) {
   const byId = {};
   ss.getSheets().forEach(sh => {
     const name = sh.getName();
-    if (name === LIST_SHEET || name === KEYWORD_SHEET || name === FOCUS_SHEET || sh.getLastRow() < 2) return;
+    if (SPECIAL_SHEETS().indexOf(name) >= 0 || sh.getLastRow() < 2) return;
     const header = ensureHeaders_(sh, [LEVEL_HEADER, KEYWORD_HEADER]);
     const values = sh.getRange(2, 1, sh.getLastRow() - 1, header.length).getDisplayValues();
     const li = header.indexOf(LEVEL_HEADER), ki = header.indexOf(KEYWORD_HEADER);
@@ -317,7 +532,7 @@ function writeRow_(sh, data) {
 
 function kindOf_(record) {
   const k = clean_(record.kind).slice(0, 40) || DEFAULT_KIND;
-  return [LIST_SHEET, KEYWORD_SHEET, FOCUS_SHEET].indexOf(k) >= 0 ? DEFAULT_KIND : k;
+  return SPECIAL_SHEETS().indexOf(k) >= 0 ? DEFAULT_KIND : k;
 }
 
 /** 섹션·항목을 한 줄로 펼침 (label 없는 것은 버림) */

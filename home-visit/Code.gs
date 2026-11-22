@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-10-28'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-22'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -94,6 +94,88 @@ function setup() {
   Logger.log('기록 시트: ' + ss.getUrl());
   const code = UrlFetchApp.fetch(HTML_URL, { muteHttpExceptions: true }).getResponseCode();
   Logger.log(code === 200 ? '화면: GitHub에서 불러옴' : '화면: GitHub 읽기 실패(' + code + ') → 프로젝트 안 Index 파일 사용');
+  CacheService.getScriptCache().remove(CAL_CACHE_KEY);
+  Logger.log('캘린더에서 찾은 어르신: ' + getCalendarPeople().people.length + '명');
+}
+
+/* =====================================================================
+ *  구글 캘린더(센터 계정 기본 캘린더)에서 어르신 정보 읽기
+ *  - 제목  "15시 30분 홍길동(작업)" → 이름
+ *  - 장소  → 주소
+ *  - 설명  "연락처 : 010-…", "주민등록번호 : 450312-2……" → 연락처, 생년월일(번호 자체는 저장하지 않음),
+ *          "L0012345678" → 장기요양인정번호
+ * ===================================================================== */
+const CAL_DAYS_BACK = 400;   // 지난 일정 며칠까지
+const CAL_DAYS_AHEAD = 90;   // 앞으로의 일정 며칠까지
+const CAL_CACHE_KEY = 'calPeople';
+const CAL_CACHE_SECONDS = 30 * 60;
+
+function getCalendarPeople() {
+  const cache = CacheService.getScriptCache();
+  try { const hit = cache.get(CAL_CACHE_KEY); if (hit) return JSON.parse(hit); } catch (e) {}
+  const now = Date.now();
+  const events = CalendarApp.getDefaultCalendar().getEvents(
+    new Date(now - CAL_DAYS_BACK * 864e5), new Date(now + CAL_DAYS_AHEAD * 864e5));
+  // 이름별로 일정 모으기 (최근 일정이 뒤로)
+  const byName = {};
+  events.forEach(ev => {
+    const name = calName_(ev.getTitle());
+    if (!name) return;
+    const info = calInfo_(ev.getDescription() || '');
+    info.addr = String(ev.getLocation() || '').trim() || info.addr || '';
+    info.t = ev.getStartTime().getTime();
+    (byName[name] = byName[name] || []).push(info);
+  });
+  const out = [];
+  Object.keys(byName).forEach(name => {
+    const list = byName[name].sort((a, b) => a.t - b.t);
+    const births = list.map(x => x.birth).filter((b, i, a) => b && a.indexOf(b) === i);
+    // 생년월일이 하나뿐(또는 없음)이면 한 분, 여러 개면 동명이인으로 나눔
+    const groups = births.length <= 1 ? [list] : births.map(b => list.filter(x => x.birth === b));
+    if (births.length > 1) {
+      // 생년월일 없는 일정은 주소 앞부분이 같은 분에게 붙임
+      list.filter(x => !x.birth && x.addr).forEach(x => {
+        const g = groups.find(gr => gr.some(y => y.addr && y.addr.slice(0, 10) === x.addr.slice(0, 10)));
+        if (g) g.push(x);
+      });
+    }
+    groups.forEach(gr => {
+      const p = { name: name, birth: '', addr: '', phone: '', ltcNo: '' };
+      gr.sort((a, b) => a.t - b.t).forEach(x => { ['birth', 'addr', 'phone', 'ltcNo'].forEach(k => { if (x[k]) p[k] = x[k]; }); });
+      out.push(p);
+    });
+  });
+  const result = { people: out, at: new Date().toISOString() };
+  try { cache.put(CAL_CACHE_KEY, JSON.stringify(result), CAL_CACHE_SECONDS); } catch (e) {}
+  return result;
+}
+
+/** 일정 제목에서 어르신 이름: 시간 표현을 지우고 "이름(" 꼴을 찾음 */
+function calName_(title) {
+  const t = String(title || '').replace(/\d{1,2}\s*[:시]\s*\d{0,2}\s*분?/g, ' ').replace(/[~\-]\s*\d.*?(?=[가-힣]|$)/g, ' ');
+  const m = t.match(/([가-힣]{2,4})\s*\(/);
+  return m ? m[1] : '';
+}
+
+/** 일정 설명에서 연락처·생년월일·인정번호 */
+function calInfo_(desc) {
+  const out = {};
+  const d = String(desc).replace(/<[^>]+>/g, '\n'); // 설명이 HTML로 저장된 경우
+  const phone = d.match(/01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/);
+  if (phone) out.phone = phone[0].replace(/[.\s]/g, '-');
+  const rrn = d.match(/(\d{2})(\d{2})(\d{2})\s*-\s*([1-8])\d{0,6}/);
+  if (rrn) {
+    const century = '34'.indexOf(rrn[4]) >= 0 || '78'.indexOf(rrn[4]) >= 0 ? '20' : '19';
+    out.birth = century + rrn[1] + '-' + rrn[2] + '-' + rrn[3];
+  } else {
+    const b = d.match(/생년월일\s*[:：]?\s*(19\d{2}|20\d{2})[.\-\/년\s]*(\d{1,2})[.\-\/월\s]*(\d{1,2})/);
+    if (b) out.birth = b[1] + '-' + ('0' + b[2]).slice(-2) + '-' + ('0' + b[3]).slice(-2);
+  }
+  const ltc = d.match(/L\s*-?\s*(\d{10})/);
+  if (ltc) out.ltcNo = 'L' + ltc[1];
+  const addr = d.match(/주소\s*[:：]\s*([^\n]+)/);
+  if (addr) out.addr = addr[1].trim();
+  return out;
 }
 
 /** 화면을 열 때 환자 목록(지난 기록 포함)과 저장 위치를 돌려줌 */

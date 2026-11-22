@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-23'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-23b'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -120,7 +120,8 @@ const CAL_CACHE_SECONDS = 30 * 60;
 const CAL_SKIP = /공휴일|휴일|생일|기념일|holiday|birthday|contacts/i; // 읽지 않을 캘린더 이름
 // 이름이 아닌 낱말 (제목에서 이름을 찾을 때 건너뜀)
 const CAL_STOP = ['방문', '첫방문', '재방문', '정기', '정기방문', '수시', '수시방문', '상담', '진료', '간호', '작업', '치료',
-  '작업치료', '회의', '교육', '점심', '출장', '휴가', '연차', '반차', '오전', '오후', '재택', '통합돌봄', '임종돌봄', '동행', '병원', '예정'];
+  '작업치료', '회의', '교육', '점심', '출장', '휴가', '연차', '반차', '오전', '오후', '재택', '통합돌봄', '임종돌봄', '동행', '병원', '예정',
+  '생년월일', '생일', '신규', '어르신', '대상자', '환자'];
 
 function getCalendarPeople() {
   const cache = CacheService.getScriptCache();
@@ -136,9 +137,13 @@ function getCalendarPeople() {
   const byName = {};
   events.forEach(ev => {
     const place = String(ev.getLocation() || '').trim();
-    const name = calName_(ev.getTitle(), !!place);
+    const title = ev.getTitle() || '';
+    const titleInfo = calInfo_(title);
+    // 제목에 생년월일이 있으면 ("한훈 생년월일 1940년 03월 12일") 장소가 없어도 어르신 일정으로 봄
+    const name = calName_(title, !!place || !!titleInfo.birth);
     if (!name) return;
     const info = calInfo_(ev.getDescription() || '');
+    ['birth', 'phone', 'ltcNo'].forEach(k => { if (!info[k] && titleInfo[k]) info[k] = titleInfo[k]; });
     info.addr = String(ev.getLocation() || '').trim() || info.addr || '';
     info.t = ev.getStartTime().getTime();
     (byName[name] = byName[name] || []).push(info);
@@ -169,7 +174,7 @@ function getCalendarPeople() {
 
 /** 일정 제목에서 어르신 이름: 시간 표현을 지우고 "이름(" 꼴을 찾음. 없으면 장소가 있는 일정에서만 첫 이름 낱말 */
 function calName_(title, hasPlace) {
-  const t = String(title || '').replace(/\d{1,2}\s*[:시]\s*\d{0,2}\s*분?/g, ' ').replace(/[~\-]\s*\d.*?(?=[가-힣]|$)/g, ' ');
+  const t = String(title || '').replace(/(19|20)\d{2}\s*[년.\-\/]\s*\d{1,2}\s*[월.\-\/]\s*\d{1,2}\s*일?/g, ' ').replace(/\d{1,2}\s*[:시]\s*\d{0,2}\s*분?/g, ' ').replace(/[~\-]\s*\d.*?(?=[가-힣]|$)/g, ' ');
   const m = t.match(/([가-힣]{2,4})\s*(?:님)?\s*\(/);
   if (m) return m[1].replace(/님$/, '');
   if (!hasPlace) return '';
@@ -189,8 +194,17 @@ function calInfo_(desc) {
     const century = '34'.indexOf(rrn[4]) >= 0 || '78'.indexOf(rrn[4]) >= 0 ? '20' : '19';
     out.birth = century + rrn[1] + '-' + rrn[2] + '-' + rrn[3];
   } else {
-    const b = d.match(/생년월일\s*[:：]?\s*(19\d{2}|20\d{2})[.\-\/년\s]*(\d{1,2})[.\-\/월\s]*(\d{1,2})/);
-    if (b) out.birth = b[1] + '-' + ('0' + b[2]).slice(-2) + '-' + ('0' + b[3]).slice(-2);
+    // "생년월일 1940년 03월 12일", "1940.3.12", "1940-03-12" (방문 날짜와 헷갈리지 않게 20년 이상 전의 해만)
+    const maxYear = new Date().getFullYear() - 20;
+    const re = /(19\d{2}|20\d{2})\s*[년.\-\/]\s*(\d{1,2})\s*[월.\-\/]\s*(\d{1,2})/g;
+    let b;
+    while ((b = re.exec(d))) {
+      const y = +b[1], mo = +b[2], da = +b[3];
+      if (y <= maxYear && mo >= 1 && mo <= 12 && da >= 1 && da <= 31) {
+        out.birth = b[1] + '-' + ('0' + mo).slice(-2) + '-' + ('0' + da).slice(-2);
+        break;
+      }
+    }
   }
   const ltc = d.match(/L\s*-?\s*(\d{10})/);
   if (ltc) out.ltcNo = 'L' + ltc[1];

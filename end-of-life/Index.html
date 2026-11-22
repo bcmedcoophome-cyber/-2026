@@ -132,6 +132,14 @@
   .info-card { background: var(--brand-soft); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
   .info-card h3 { margin: 0 0 6px; font-size: 19px; }
   .empty-note { color: var(--muted); padding: 12px 4px; }
+  .rec.tap { width: 100%; text-align: left; font: inherit; color: var(--ink); cursor: pointer; display: block; }
+  .rec.tap .more { display: block; margin-top: 8px; color: var(--brand); font-weight: 700; }
+  .rec-acts { display: flex; gap: 10px; margin: 6px 0 24px; }
+  .rec-acts .btn { flex: 1; min-height: 64px; }
+  .full dl { grid-template-columns: 1fr; gap: 2px; }
+  .full dt { margin-top: 10px; font-weight: 700; }
+  .full dd { white-space: pre-wrap; font-size: 20px; }
+  .banner.edit { background: #fff4cc; color: #5c4400; }
   .badge { display: inline-block; font-size: 15px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
     background: var(--muted); color: var(--card); vertical-align: middle; }
   .elder-btn.closed { opacity: .75; }
@@ -177,6 +185,13 @@
     <div id="recsBox"></div>
     <div id="eldersBox" hidden></div>
   </div>
+  <div id="recView" hidden>
+    <div id="recBox"></div>
+    <div class="rec-acts">
+      <button type="button" class="btn" id="recBack">← 돌아오기</button>
+      <button type="button" class="btn primary" id="recEdit">✏️ 고치기</button>
+    </div>
+  </div>
   <div id="elderView" hidden>
     <button type="button" class="btn small" id="elderBack" style="margin-bottom:12px">← 내 어르신 목록</button>
     <div id="elderBox"></div>
@@ -186,6 +201,9 @@
 <main id="writeMain">
   <div id="demoBanner" class="banner info">미리보기(예시) 화면입니다. 이름·비밀번호는 아무거나 넣어도 들어가지고, 어르신 정보는 지어낸 예시입니다. 실제로 저장되지 않습니다.</div>
   <div id="errBanner" class="banner danger"></div>
+  <div id="editBanner" class="banner edit"><b>✏️ 고치는 중</b> <span id="editWhat"></span><br>
+    고친 뒤 [전송]을 누르면 보낸 기록이 새 내용으로 바뀝니다.
+    <button class="btn" type="button" id="editCancel">고치기 그만두기</button></div>
   <div id="okBanner" class="banner ok"></div>
   <div id="queueBanner" class="banner info"><span id="queueText"></span>
     <button class="btn primary" type="button" id="retryBtn">다시 보내기</button></div>
@@ -251,7 +269,7 @@ const TEAMS = ['따품안', '임종하면', '해바라기', '햇살동행'];
  *  showIf: 다른 항목이 특정 값일 때만 보임
  * ===================================================================== */
 const KIND = { name: '방문기록지', filePrefix: '생애말기활동가기록지', docTitle: '생애말기활동가기록지' };
-const UI_VERSION = '2026-11-21c'; // 화면 버전 (GitHub에서 고치면 올림)
+const UI_VERSION = '2026-11-22'; // 화면 버전 (GitHub에서 고치면 올림)
 const FORM = [
   { key: 'date', label: '방문날짜', type: 'date', required: true },
   { key: 'time', label: '활동 시간', type: 'timerange', required: true, hint: '시작한 시간과 끝난 시간을 넣어 주세요' },
@@ -447,6 +465,8 @@ function paint() {
     document.querySelector(`[data-sec="${f.key}"]`).hidden = !visible(f);
   });
   paintMe();
+  $('editBanner').classList.toggle('show', !!state._edit);
+  $('editWhat').textContent = state._edit ? state._editWhat || '' : '';
   updateProgress();
 }
 
@@ -564,6 +584,7 @@ function buildRecord() {
   const to = noticeTo();
   return {
     id: state._id || (state._id = uid()),
+    edit: !!state._edit,
     kind: KIND.name, filePrefix: KIND.filePrefix, docTitle: KIND.docTitle,
     author: state.author || '',
     team: state.team || '',
@@ -666,16 +687,62 @@ function isClosed(e) { return !!e.closed || (e.info || []).some(f => f.label ===
 function closedOn(e) { return e.closedOn || ((e.info || []).find(f => f.label === '종결일') || {}).value || ''; }
 function dateText(v) { const t = pickText('date', v); return v ? t : ''; }
 function recCard(x, showAuthor) {
+  const own = !!x.values;
   const row = (k, v, cls) => v ? `<dt>${k}</dt><dd${cls ? ` class="${cls}"` : ''}>${esc(v)}</dd>` : '';
   const notice = x.notice && x.notice !== '없음';
-  return `<article class="rec">
+  const tag = own ? 'button type="button"' : 'article', end = own ? 'button' : 'article';
+  return `<${tag} class="rec${own ? ' tap' : ''}"${own ? ` data-rec-id="${esc(x.id)}"` : ''}>
     <div class="r-top"><span>${esc(showAuthor ? (x.author || '') : (x.elder || ''))}</span><small>${esc(dateText(x.date))}</small></div>
     <dl>${row('활동 시간', x.time)}${row('대화상대', x.partner)}${row('기분·상태', x.mood)}
       ${row('스스로 가능', x.selfCare)}${row('불편한 것', x.discomfort)}
       ${notice ? row('전달', x.notice + (x.noticeNote ? ' — ' + x.noticeNote : ''), 'alert') : ''}
       ${row('활동 내용', x.memo)}${x.supplies && x.supplies !== '없음' ? row('지급물품', x.supplies) : ''}${row('다음 방문', x.nextVisit ? dateText(x.nextVisit) : '')}
-      ${x.status && x.status !== '전송완료' ? row('상태', x.status) : ''}</dl>
-  </article>`;
+      ${x.status && x.status !== '전송완료' ? row('상태', x.status) : ''}${x.edited ? row('고친 때', x.edited.slice(0, 16)) : ''}</dl>
+    ${own ? '<span class="more">눌러서 전체 보기 ›</span>' : ''}
+  </${end}>`;
+}
+
+/* ---------- 내가 쓴 기록: 전체 보기 / 고치기 ---------- */
+let recOpen = null, recFrom = 'list';
+function findMine(id) { return mineData && mineData.mine.find(x => x.id === id); }
+function openRec(id) {
+  const x = findMine(id);
+  if (!x) return;
+  recOpen = x;
+  recFrom = $('elderView').hidden ? 'list' : 'elder';
+  const v = x.values || {};
+  // 기록하기 화면 순서대로, 그 밖의 칸은 뒤에
+  const order = ['방문날짜', '시작 시간', '끝 시간', '활동 시간'].concat(FORM.map(f => f.label));
+  const labels = order.filter((l, i) => v[l] && order.indexOf(l) === i).concat(Object.keys(v).filter(l => order.indexOf(l) < 0));
+  const val = l => l === '방문날짜' || l === '다음 방문 날짜' ? dateText(v[l]) : v[l];
+  $('recBox').innerHTML = `<h2 style="margin:0 0 6px;font-size:24px">${esc(x.elder)} 어르신</h2>
+    <p class="hint" style="margin:0 0 12px">${esc(dateText(x.date))} · 내가 쓴 기록${x.edited ? ' · 고친 때 ' + esc(x.edited.slice(0, 16)) : ''}</p>
+    <article class="rec full"><dl>${labels.map(l => `<dt>${esc(l)}</dt><dd>${esc(val(l))}</dd>`).join('')}</dl></article>`;
+  $('mineListView').hidden = true; $('elderView').hidden = true; $('recView').hidden = false;
+  window.scrollTo({ top: 0 });
+}
+function closeRec() {
+  $('recView').hidden = true;
+  if (recFrom === 'elder') $('elderView').hidden = false; else $('mineListView').hidden = false;
+  window.scrollTo({ top: 0 });
+}
+/** 보낸 기록을 기록하기 화면에 채워서 고치기 시작 */
+function startEdit(x) {
+  if (hasValue(state.elder) && state._id !== x.id && !state._edit) saveCurrent(true); // 쓰던 기록은 보관
+  const v = x.values || {};
+  const s = freshState();
+  s.date = v['방문날짜'] || x.date; s.elder = v['어르신 이름'] || x.elder;
+  FORM.forEach(f => {
+    if (f.type === 'timerange') { s.timeStart = v['시작 시간'] || ''; s.timeEnd = v['끝 시간'] || ''; return; }
+    if (f.key === 'date' || f.key === 'elder') return;
+    const val = v[f.label] || '';
+    s[f.key] = f.type === 'multi' ? val.split(/,\s*/).filter(o => f.options.includes(o)) : val;
+  });
+  s._id = x.id; s._edit = true; s._editWhat = `${dateText(s.date)} ${s.elder} 어르신`;
+  state = s; calcTime();
+  LS.set(KEY_DRAFT, state);
+  paint(); showView('write');
+  flash('okBanner', '보낸 기록을 불러왔습니다. 고친 뒤 [전송]을 눌러 주세요.');
 }
 function renderMine() {
   $('mineName').textContent = auth ? auth.name : '';
@@ -725,6 +792,18 @@ function DEMO_MINE(me) {
     v('2026-10-20', me, '한○분', { time: '40분', partner: '자녀', mood: '수면', notice: '없음', memo: '가족과 이야기 나눔.' }),
     v('2026-11-18', me, '최○길', { time: '35분', partner: '대상자 본인, 배우자', mood: '우울', discomfort: '입맛이 없으심', notice: '사회복지사', noticeNote: '식사량이 줄었다고 배우자분이 걱정하심', memo: '산책 함께 함. 가족과 이야기 나눔.', nextVisit: '2026-11-25' })
   ];
+  // 내가 쓴 기록은 전체 내용(values)도 있음 → 눌러서 전체 보기·고치기
+  a.forEach(x => {
+    if (x.author !== me) return;
+    const m = /(?:(\d+)시간)?\s*(?:(\d+)분)?/.exec(x.time || ''), mins = (+(m[1] || 0)) * 60 + (+(m[2] || 0));
+    const end = 14 * 60 + mins;
+    x.values = { '방문날짜': x.date, '어르신 이름': x.elder, '시작 시간': '14:00',
+      '끝 시간': String(Math.floor(end / 60)).padStart(2, '0') + ':' + String(end % 60).padStart(2, '0'), '활동 시간': x.time,
+      '대화상대': x.partner, '대상자 기분·상태': x.mood, '스스로 가능한 것': x.selfCare || '', '가장 불편한 것': x.discomfort || '',
+      '필수 전달사항': x.notice, '전달 내용': x.noticeNote || '', '지급물품': x.supplies || '',
+      '다음 방문 날짜': x.nextVisit || '', '활동 내용·특이사항': (x.memo || '') + ' (예시) 전체 보기에서는 활동 내용이 잘리지 않고 끝까지 보입니다.' };
+    Object.keys(x.values).forEach(k => { if (!x.values[k]) delete x.values[k]; });
+  });
   const mine = a.filter(x => x.author === me).sort((x, y) => y.date.localeCompare(x.date));
   const group = n => a.filter(x => x.elder === n).sort((x, y) => y.date.localeCompare(x.date));
   return { name: me, team: '햇살동행', mine, elders: [
@@ -756,7 +835,9 @@ async function onConfirm() {
   try {
     const res = await sendRecord('saveVisit', rec);
     const link = res && res.docUrl ? ` <a href="${esc(res.docUrl)}" target="_blank" rel="noopener">기록지 보기</a>` : '';
-    flash('okBanner', `✅ ${esc(rec.meta.elder)} 어르신 기록을 보냈습니다.${res && res.demo ? ' (미리보기라 실제로 보내지지는 않음)' : ''}${link}`, 15000);
+    flash('okBanner', rec.edit ? `✏️ ${esc(rec.meta.elder)} 어르신 기록을 고친 내용으로 바꿨습니다.${res && res.demo ? ' (미리보기라 실제로 바뀌지는 않음)' : ''}`
+      : `✅ ${esc(rec.meta.elder)} 어르신 기록을 보냈습니다.${res && res.demo ? ' (미리보기라 실제로 보내지지는 않음)' : ''}${link}`, 15000);
+    if (rec.edit) loadMine();
     rememberElder(rec);
   } catch (err) {
     enqueue(rec);
@@ -815,6 +896,7 @@ function saveCurrent(silent) {
   showSaved();
   if (silent) return true;
   const who = esc(state.elder);
+  if (state._edit) { flash('okBanner', `💾 고치던 내용을 휴대폰에 보관했습니다. [전송]을 눌러야 보낸 기록이 바뀝니다.`); return true; }
   if (!IS_GAS) { flash('okBanner', `💾 ${who} 어르신 기록을 이 휴대폰에 저장했습니다.`); return true; }
   flash('okBanner', `💾 ${who} 어르신 기록을 휴대폰에 저장했습니다. 시트에 저장하는 중…`, 20000);
   sendRecord('saveDraft', buildRecord())
@@ -915,6 +997,7 @@ function init() {
   $('sendBtn').addEventListener('click', () => {
     if (sending || !validate(true)) return;
     $('summary').textContent = summaryText(buildRecord());
+    document.querySelector('#confirmDlg .d-head').textContent = state._edit ? '고친 내용으로 바꿀까요?' : '이대로 보낼까요?';
     $('confirmDlg').showModal();
   });
   $('confirmBtn').addEventListener('click', onConfirm);
@@ -927,13 +1010,18 @@ function init() {
   $('retryBtn').addEventListener('click', flushQueue);
   document.querySelectorAll('.tabs [data-view]').forEach(b => b.addEventListener('click', () => {
     showView(b.dataset.view);
-    if (b.dataset.view === 'mine') { $('elderView').hidden = true; $('mineListView').hidden = false; loadMine(); }
+    if (b.dataset.view === 'mine') { $('elderView').hidden = true; $('recView').hidden = true; $('mineListView').hidden = false; loadMine(); }
   }));
   $('loginBtn').addEventListener('click', onLogin);
   $('loginPin').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); onLogin(); } });
   $('mineReload').addEventListener('click', loadMine);
   document.querySelectorAll('.sub-tabs [data-sub]').forEach(b => b.addEventListener('click', () => { mineSub = b.dataset.sub; renderMine(); }));
   $('eldersBox').addEventListener('click', e => { const b = e.target.closest('[data-elder-i]'); if (b) openElder(+b.dataset.elderI); });
+  $('recsBox').addEventListener('click', e => { const b = e.target.closest('[data-rec-id]'); if (b) openRec(b.dataset.recId); });
+  $('elderBox').addEventListener('click', e => { const b = e.target.closest('[data-rec-id]'); if (b) openRec(b.dataset.recId); });
+  $('recBack').addEventListener('click', closeRec);
+  $('recEdit').addEventListener('click', () => { if (recOpen) { closeRec(); startEdit(recOpen); } });
+  $('editCancel').addEventListener('click', () => { resetForm(); flash('okBanner', '고치기를 그만두었습니다. 보낸 기록은 그대로입니다.'); });
   $('elderBack').addEventListener('click', () => { $('elderView').hidden = true; $('mineListView').hidden = false; window.scrollTo({ top: 0 }); });
   showView('write');
   window.addEventListener('online', flushQueue);

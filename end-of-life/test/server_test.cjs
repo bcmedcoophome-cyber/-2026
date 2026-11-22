@@ -27,7 +27,7 @@ const L = rows(list)[0], D = rows(det)[0];
 assert.equal(L['상태'], '전송완료'); assert.equal(D['상태'], '전송완료');
 assert.equal(L['기록종류'], '방문기록지');
 assert.equal(L['알림'], '의료진 전달사항 있음: 허리 통증');
-assert.ok(L['기록지'].startsWith('https://docs/')); assert.equal(L['기록지'], D['기록지']);
+assert.ok(L['기록지'].startsWith('https://docs.google.com/open?id=')); assert.equal(L['기록지'], D['기록지']);
 assert.equal(D['전달 내용'], "'=허리 통증");
 assert.ok(!list.unformatted && !det.unformatted);
 const doc = Object.values(E.docs)[0];
@@ -52,7 +52,7 @@ E.api.saveDraft(rec('x1', { kind: '전체목록' }));
 assert.equal(rows(det).length, 2);
 // getInitData
 const init = E.api.getInitData();
-assert.equal(init.version, '2026-11-21f');
+assert.equal(init.version, '2026-11-22');
 assert.deepEqual(init.elders, [], '저장된 정보는 화면으로 보내지 않음');
 assert.ok(!('docUrl' in E.api.saveVisit(rec('a1'))), '문서 주소도 보내지 않음');
 // 필수값
@@ -340,5 +340,44 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   assert.deepEqual(names.map(n => n.normalize('NFC')), ['심윤재', '이명옥', '박동옥'], '두 번째 이명옥 줄 정리');
   assert.ok(!acc.cells.some(r => r[2] === '222222'));
   assert.equal(t.name, '이명옥');
+}
+{
+  // 고치기: 내가 보낸 기록만, 같은 줄 갱신, 새 기록지 + 예전 기록지 휴지통, 수정시각, 전송시각 유지
+  const U = makeEnv(); U.api.setup();
+  const mk = (id, author, memo, extra) => Object.assign(rec(id, { author, team: '따품안', meta: { elder: '김상례', date: '2026-11-10' }, alerts: [] }),
+    { sections: [{ title: '활동 내용', items: [{ label: '대화상대', value: '자녀' }, { label: '활동 내용·특이사항', value: memo }] }] }, extra || {});
+  U.api.saveVisit(mk('u1', '심윤재', '처음 쓴 내용'));
+  U.api.saveVisit(mk('u2', '이명옥', '남의 기록'));
+  const ss = Object.values(U.spreadsheets)[0];
+  const det = ss.getSheetByName('방문기록지'), list = ss.getSheetByName('전체목록');
+  const before = rows(list).find(r => r['기록ID'] === 'u1');
+  const oldDoc = before['기록지'].split('id=')[1];
+  // 내 기록 전체 보기 values
+  const tok = U.api.login({ name: '심윤재', pin: '1111' }).token;
+  let d = U.api.myData({ name: '심윤재', token: tok });
+  assert.equal(d.mine[0].values['활동 내용·특이사항'], '처음 쓴 내용');
+  assert.ok(!('기록ID' in d.mine[0].values) && !('기록지' in d.mine[0].values), '내부 칸 숨김');
+  const other = d.elders[0].visits.find(v => v.id === 'u2');
+  assert.ok(other && !other.values, '남의 기록은 전체 내용 없음');
+  // 저장(임시저장)으로는 보낸 기록이 안 바뀜
+  U.api.saveDraft(mk('u1', '심윤재', '저장만', { edit: true }));
+  assert.equal(rows(det).find(r => r['기록ID'] === 'u1')['활동 내용·특이사항'], '처음 쓴 내용');
+  // 고치기 전송
+  const r = U.api.saveVisit(mk('u1', '심윤재', '고친 내용', { edit: true }));
+  assert.equal(r.status, '전송완료'); assert.ok(!r.duplicate);
+  const D = rows(det).filter(x => x['기록ID'] === 'u1'), L = rows(list).filter(x => x['기록ID'] === 'u1');
+  assert.equal(D.length, 1); assert.equal(L.length, 1, '같은 줄');
+  assert.equal(D[0]['활동 내용·특이사항'], '고친 내용');
+  assert.ok(D[0]['수정시각'] && L[0]['수정시각'], '수정시각');
+  assert.equal(L[0]['전송시각'], before['전송시각'], '처음 보낸 시각 유지');
+  assert.notEqual(L[0]['기록지'], before['기록지'], '새 기록지');
+  assert.equal(U.files[oldDoc].trashed, true, '예전 기록지 휴지통');
+  // 남의 기록 고치기 불가
+  assert.throws(() => U.api.saveVisit(Object.assign(mk('u2', '심윤재', '가로채기', { edit: true }))), /내가 쓴 기록만/);
+  assert.equal(rows(det).find(x => x['기록ID'] === 'u2')['활동 내용·특이사항'], '남의 기록');
+  // edit 표시 없이 다시 보내면 예전처럼 중복으로 무시
+  assert.ok(U.api.saveVisit(mk('u1', '심윤재', '재전송')).duplicate);
+  d = U.api.myData({ name: '심윤재', token: tok });
+  assert.ok(d.mine[0].edited, '고친 때 표시');
 }
 console.log('서버 시험 모두 통과');

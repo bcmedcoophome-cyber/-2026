@@ -52,7 +52,7 @@ E.api.saveDraft(rec('x1', { kind: '전체목록' }));
 assert.equal(rows(det).length, 2);
 // getInitData
 const init = E.api.getInitData();
-assert.equal(init.version, '2026-11-22');
+assert.equal(init.version, '2026-11-22b');
 assert.deepEqual(init.elders, [], '저장된 정보는 화면으로 보내지 않음');
 assert.ok(!('docUrl' in E.api.saveVisit(rec('a1'))), '문서 주소도 보내지 않음');
 // 필수값
@@ -379,5 +379,30 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   assert.ok(U.api.saveVisit(mk('u1', '심윤재', '재전송')).duplicate);
   d = U.api.myData({ name: '심윤재', token: tok });
   assert.ok(d.mine[0].edited, '고친 때 표시');
+}
+{
+  // 실제 시트 모양: 데이터 칸 → 빈 칸 → 사용법 → 장기요양등급·대화·활동 → 정리하면 사용법은 맨 뒤, 값은 그대로
+  const V = makeEnv(); V.api.setup();
+  V.api.saveVisit(rec('v1', { author: '이명옥' }));
+  const ss = Object.values(V.spreadsheets)[0];
+  const sh = ss.insertSheet('어르신기초정보');
+  const OLD = ['어르신 이름', '담당 활동가1', '담당 활동가2', '상태', '종결일', '성별', '나이', '사는 곳', '주요 질환·건강', '가족·보호자', '돌봄 상황', '주의할 점', '전달 메모'];
+  sh.cells.push(OLD.concat(['', '사용법', '장기요양등급', '대화·활동']));
+  sh.cells.push(['허준녀', '이명옥', '심윤재', '진행', '', '여', '95세', '약대동', '치매', '', '', '와상', '', '', '· 한 어르신 = 한 줄', '2등급', '전혀불가']);
+  sh.cells.push(['김상례', '이명옥', '심윤재', '진행', '', '여', '91세', '고강동', '치매', '', '', '', '', '', '· 담당 활동가로', '', '대화, 활동가능']);
+  const tok = V.api.login({ name: '이명옥', pin: '1111' }).token;
+  const d = V.api.myData({ name: '이명옥', token: tok });
+  const H = sh.cells[0];
+  assert.equal(H.indexOf('사용법'), H.length - 1, '사용법은 맨 뒤'); assert.equal(H.filter(Boolean).pop(), '사용법');
+  assert.ok(H.indexOf('장기요양등급') < H.indexOf('사용법') && H.indexOf('대화·활동') < H.indexOf('사용법'));
+  const g = (n, h) => sh.cells.find(r => r[0] === n)[H.indexOf(h)];
+  assert.equal(g('허준녀', '장기요양등급'), '2등급', '안내 칸 뒤 값도 살아 있음');
+  assert.equal(g('김상례', '대화·활동'), '대화, 활동가능');
+  assert.equal(g('허준녀', '사는 곳'), '약대동'); assert.equal(g('허준녀', '담당 활동가2'), '심윤재');
+  assert.equal(sh.cells.filter(r => r[0] && !/^어르신 이름|^·|사용법/.test(r[0])).length, 2, '사람 수 그대로');
+  assert.ok(!sh.cells.slice(1).some(r => r.slice(0, H.indexOf('사용법')).some(x => /^·/.test(x))), '안내 글이 데이터에 안 섞임');
+  assert.ok(d.elders.find(e => e.name === '허준녀').info.some(f => f.label === '장기요양등급' && f.value === '2등급'));
+  const snap = JSON.stringify(sh.cells); V.api.myData({ name: '이명옥', token: tok });
+  assert.equal(JSON.stringify(sh.cells), snap, '한 번만 정리');
 }
 console.log('서버 시험 모두 통과');

@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '생애말기 활동기록';
-const APP_VERSION = '2026-11-21f'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
+const APP_VERSION = '2026-11-22'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub의 이 앱 전용 브랜치 — main은 건드리지 않음)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/claude/end-of-life-record/end-of-life/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -70,6 +70,8 @@ const LOCK_SECONDS = 15 * 60; // 15분 잠금
 const INFO_SHEET = '어르신기초정보';
 const INFO_ADD_FILE = '기초정보추가.csv'; // 이 이름의 파일을 저장 폴더에 두면 빈 칸을 채워 넣고 이름을 '반영됨'으로 바꿈
 const INFO_HEADERS = ['어르신 이름', '담당 활동가1', '담당 활동가2', '상태', '종결일', '성별', '나이', '장기요양등급', '대화·활동', '사는 곳', '주요 질환·건강', '가족·보호자', '돌봄 상황', '주의할 점', '전달 메모'];
+// 전체 보기에서 빼는 칸
+const FULL_HIDE = ['기록ID', '전송시각', '구글계정', '기록지', '중요도', '중요 키워드', '활동가', '팀', '상태', '수정시각'];
 const SPECIAL_SHEETS = () => [LIST_SHEET, KEYWORD_SHEET, FOCUS_SHEET, ACCOUNT_SHEET, INFO_SHEET];
 const PROP_SHEET = 'EOL_SHEET_ID';
 const PROP_FOLDER = 'EOL_FOLDER_ID';
@@ -163,7 +165,13 @@ function myData(auth) {
     for (let r = 1; r < values.length; r++) {
       const row = values[r];
       if (!get(row, '기록ID') || !get(row, '어르신 이름')) continue;
-      all.push(summary_(sh.getName(), get));
+      const sm = summary_(sh.getName(), get);
+      // 전체 내용(내가 쓴 기록에만 남김): 칸 이름 → 값
+      const vals = {};
+      h.forEach((label, i) => { if (label && FULL_HIDE.indexOf(label) < 0 && String(row[i] || '').trim()) vals[label] = String(row[i]); });
+      sm.values = vals;
+      sm.edited = get(row, '수정시각');
+      all.push(sm);
       function summary_(kind, g) {
         return {
           id: g(row, '기록ID'), kind: kind, status: g(row, '상태'),
@@ -180,6 +188,7 @@ function myData(auth) {
   });
   const byDate = (a, b) => String(b.date).localeCompare(String(a.date));
   const me = normName_(acc.name);
+  all.forEach(x => { if (normName_(x.author) !== me) delete x.values; }); // 남의 기록은 요약만
   const mine = all.filter(x => normName_(x.author) === me).sort(byDate);
   const myElders = {};
   mine.forEach(x => { myElders[elderKey_(x.elder)] = 1; });
@@ -250,12 +259,21 @@ function upsertRecord_(record, final) {
 
     // 이미 전송 완료된 기록(다시 보내기 등)은 중복 문서를 만들지 않음
     const prev = findRow_(list, record.id);
-    if (prev && prev.get(STATUS_HEADER) === STATUS_SENT) {
+    const editing = !!(final && record.edit && prev && prev.get(STATUS_HEADER) === STATUS_SENT);
+    if (prev && prev.get(STATUS_HEADER) === STATUS_SENT && !editing) {
       return { ok: true, duplicate: true, status: STATUS_SENT };
+    }
+    if (editing && normName_(prev.get('활동가')) !== normName_(acc.name)) {
+      throw new Error('내가 쓴 기록만 고칠 수 있습니다.');
     }
 
     const docUrl = final ? createDoc_(folder, record) : '';
     const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    if (editing) { // 고치기: 예전 기록지는 휴지통으로 (새 기록지는 위에서 만듦)
+      const m = String(prev.get(LINK_HEADER)).match(/id=([\w-]+)|\/d\/([\w-]+)/);
+      if (m) { try { DriveApp.getFileById(m[1] || m[2]).setTrashed(true); } catch (e) {} }
+    }
+    const sentAt = editing ? (prev.get('전송시각') || now) : now;
     const status = final ? STATUS_SENT : STATUS_DRAFT;
     const keywords = loadKeywords_(ss);
     const texts = allItems_(record).filter(it => NO_SCAN.indexOf(it.label) < 0).map(it => it.value)
@@ -265,7 +283,7 @@ function upsertRecord_(record, final) {
     // 1) 기록 종류별 탭: 항목 전체
     const data = {};
     data['기록ID'] = record.id;
-    data['전송시각'] = now;
+    data['전송시각'] = sentAt;
     data['활동가'] = record.author || '';
     data['팀'] = record.team || '';
     data['구글계정'] = Session.getActiveUser().getEmail() || '';
@@ -276,16 +294,17 @@ function upsertRecord_(record, final) {
     data[LEVEL_HEADER] = pr.level;
     data[KEYWORD_HEADER] = pr.words;
     data[LINK_HEADER] = docUrl;
+    if (editing) data['수정시각'] = now;
     writeRow_(sh, data);
 
     // 2) 전체목록 탭: 한 건 한 줄
-    writeRow_(list, {
-      '기록ID': record.id, '전송시각': now, '기록종류': kind,
+    writeRow_(list, Object.assign({
+      '기록ID': record.id, '전송시각': sentAt, '기록종류': kind,
       '방문날짜': record.meta.date, '어르신 이름': record.meta.elder,
       '활동가': record.author || '', '팀': record.team || '', '상태': status,
       '중요도': pr.level, '중요 키워드': pr.words,
       '알림': (record.alerts || []).filter(Boolean).join(' / '), '기록지': docUrl
-    });
+    }, editing ? { '수정시각': now } : {}));
     // 키워드가 바뀌었으면 지난 기록도 다시 판정, 색 표시·중요기록 탭 맞추기
     refreshPriorityIfChanged_(ss, keywords);
     ensureViews_(ss, list);

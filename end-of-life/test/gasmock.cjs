@@ -135,7 +135,7 @@ function makeEnv(opts = {}) {
           return { setBorderColor() {}, getNumRows: () => rows.length, getRow: i => ({ getCell: j => cell(i, j) }) };
         }
       };
-      const doc = { getBody: () => body, saveAndClose() {}, getId: () => id, getUrl: () => 'https://docs/' + id };
+      const doc = { getBody: () => body, saveAndClose() {}, getId: () => id, getUrl: () => 'https://docs.google.com/open?id=' + id };
       docs[id] = { name, content };
       files[id] = { id, name, parent: root.id, kind: 'doc' };
       return doc;

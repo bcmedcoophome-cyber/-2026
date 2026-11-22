@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-23j'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-23k'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -649,6 +649,25 @@ function safeCell_(v) {
 }
 
 /** 하위 폴더를 이름으로 찾고, 없으면 만듦 */
+/* =====================================================================
+ *  문자서명 — 별도 「문자서명」 앱이 받은 서명(링크번호.png)을 찾아 돌려줌
+ *  (그 앱은 서명 그림만 저장하고 개인정보는 다루지 않음)
+ * ===================================================================== */
+const SMS_SIGN_FOLDER = '문자서명';
+function getSmsSignature(token) {
+  if (!/^[a-f0-9]{24}-[a-z0-9]{6,12}$/.test(String(token || ''))) throw new Error('서명 링크 번호가 올바르지 않습니다.');
+  const { folder } = ensureStorage_();
+  const box = getSubFolder_(folder, SMS_SIGN_FOLDER);
+  const it = box.getFilesByName(token + '.png');
+  if (!it.hasNext()) return { status: 'wait' };
+  const file = it.next();
+  const sig = 'data:image/png;base64,' + Utilities.base64Encode(file.getBlob().getBytes());
+  // 7일 지난 서명 그림은 정리 (동의서 PDF 안에는 남아 있음)
+  const old = Date.now() - 7 * 864e5, all = box.getFiles();
+  while (all.hasNext()) { const f = all.next(); if (f.getDateCreated().getTime() < old) f.setTrashed(true); }
+  return { status: 'done', sig: sig };
+}
+
 function getSubFolder_(parent, name) {
   const it = parent.getFoldersByName(name);
   return it.hasNext() ? it.next() : parent.createFolder(name);

@@ -172,6 +172,10 @@
   .sigwrap { border: 1px dashed var(--muted); border-radius: 12px; background: #fff; position: relative; touch-action: none; }
   .sigwrap canvas { display: block; width: 100%; height: 160px; border-radius: 12px; }
   .sigwrap .ph { position: absolute; inset: 0; display: grid; place-items: center; color: #9aa0a6; pointer-events: none; font-size: 15px; }
+  .sigbtns { display: flex; gap: 8px; margin-top: 8px; } .sigbtns > * { flex: 1; text-align: center; }
+  .smsbox { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: #eef3ff; font-size: 14px; line-height: 1.5; }
+  .smsbox .btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+  .smsbox .st { font-weight: 700; }
   .sigrow { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 13px; color: var(--muted); }
   .check { display: flex; gap: 8px; align-items: center; font-size: 15px; margin: 4px 0 10px; }
   .check input { width: 22px; height: 22px; }
@@ -358,7 +362,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-11-23c'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-11-23d'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -1094,7 +1098,73 @@ function sigHtml(key, label) {
   const photo = F().sigPhoto; // 일차의료: 문자로 받은 서명 사진 첨부
   return `<div class="field"><span class="label">${esc(label)} <span class="req">*</span></span>
     <div class="sigwrap"><canvas id="sig-${key}"></canvas><div class="ph" id="ph-${key}">${photo ? '손가락으로 서명하거나 [서명 사진 첨부]를 눌러 주세요' : '여기에 손가락으로 서명해 주세요'}</div></div>
-    <div class="sigrow"><span>서명일 <b class="sigdate"></b></span><span>${photo ? `<label class="btn small">📷 서명 사진 첨부<input type="file" accept="image/*" data-photo="${key}" hidden></label> ` : ''}<button type="button" class="btn small" data-clear="${key}">지우기</button></span></div></div>`;
+    <div class="sigrow"><span>서명일 <b class="sigdate"></b></span><button type="button" class="btn small" data-clear="${key}">지우기</button></div>
+    ${photo ? `<div class="sigbtns"><button type="button" class="btn small" data-sms="${key}">📱 문자로 서명 받기</button><label class="btn small">📷 서명 사진 첨부<input type="file" accept="image/*" data-photo="${key}" hidden></label></div>` : ''}
+    ${photo ? `<div class="smsbox" id="sms-${key}" hidden></div>` : ''}</div>`;
+}
+
+/* ---------- 문자로 서명 받기 ----------
+ * 별도 「문자서명」 앱 링크(서명 칸만 있음, 개인정보 없음)를 문자로 보내고,
+ * 받는 분이 서명하면 서명란에 자동으로 들어옴. 개인정보 입력은 사회복지사가 이 화면에서 함. */
+const SIGN_APP_ID = ''; // 「문자서명」 앱 배포 ID (주소 …/macros/s/[여기]/exec)
+function signAppUrl() { return SIGN_APP_ID ? ['https:', '', 'script.google.com', 'macros', 's', SIGN_APP_ID, 'exec'].join('/') : ''; }
+function newSignToken() {
+  const a = new Uint8Array(12); crypto.getRandomValues(a);
+  return Array.from(a, b => ('0' + b.toString(16)).slice(-2)).join('') + '-' + Date.now().toString(36);
+}
+function smsLink(key) { return signAppUrl() + '?t=' + cstate['smsTok_' + key] + '&f=' + (cstate.form || 'nhis'); }
+function smsStart(key) {
+  if (!signAppUrl()) { cErr('「문자서명」 앱이 아직 연결되지 않았습니다. 관리자에게 문의해 주세요.'); return; }
+  if (!cstate['smsTok_' + key]) { cstate['smsTok_' + key] = newSignToken(); cstate['smsAt_' + key] = Date.now(); cSave(); }
+  smsShow(key); smsPollSoon();
+}
+function smsShow(key) {
+  const box = $('sms-' + key); if (!box) return;
+  const tok = cstate['smsTok_' + key];
+  if (!tok) { box.hidden = true; box.innerHTML = ''; return; }
+  const num = () => String((key === 'proxy' ? cstate.pPhone : cstate.phone) || '').replace(/[^0-9]/g, '');
+  const body = () => '[재택의료센터] 동의서 서명 요청입니다. 아래 링크를 눌러 서명해 주세요. (3일 안에)\n' + smsLink(key);
+  box.hidden = false;
+  box.innerHTML = `<div>${key === 'proxy' ? '가족' : '어르신'}께 아래 링크를 문자로 보내세요. 링크에는 <b>서명 칸만</b> 있고 개인정보는 없습니다.</div>
+    <div class="btns"><button type="button" class="btn small primary" data-smssend="${key}">💬 문자 보내기</button>
+    <button type="button" class="btn small" data-smscopy="${key}">링크 복사</button>
+    <button type="button" class="btn small" data-smscheck="${key}">받은 서명 확인</button>
+    <button type="button" class="btn small" data-smsstop="${key}">요청 취소</button></div>
+    <div class="st" id="smsst-${key}">⏳ 서명을 기다리는 중… (받으면 서명칸에 자동으로 들어옵니다)</div>`;
+  box.querySelector('[data-smssend]').addEventListener('click', () => { location.href = 'sms:' + num() + '?&body=' + encodeURIComponent(body()); });
+  box.querySelector('[data-smscopy]').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(smsLink(key)); flash('cOk', '링크를 복사했습니다. 문자에 붙여넣어 보내세요.', 4000); }
+    catch (e) { prompt('아래 링크를 길게 눌러 복사하세요', smsLink(key)); }
+  });
+  box.querySelector('[data-smscheck]').addEventListener('click', () => smsCheck(key, true));
+  box.querySelector('[data-smsstop]').addEventListener('click', () => { delete cstate['smsTok_' + key]; delete cstate['smsAt_' + key]; cSave(); smsShow(key); });
+}
+async function smsCheck(key, manual) {
+  const tok = cstate['smsTok_' + key]; if (!tok) return;
+  const st = $('smsst-' + key);
+  if (Date.now() - (cstate['smsAt_' + key] || 0) > 3 * 864e5) { if (st) st.textContent = '⌛ 링크가 만료되었습니다(3일). [요청 취소] 후 다시 보내 주세요.'; return; }
+  try {
+    const res = await callServer('getSmsSignature', tok);
+    if (cstate['smsTok_' + key] !== tok) return;
+    if (res && res.status === 'done' && res.sig) {
+      cstate['sig_' + key] = res.sig; delete cstate['smsTok_' + key]; delete cstate['smsAt_' + key]; cSave();
+      if (pads[key]) pads[key].load(res.sig);
+      const box = $('sms-' + key); if (box) { box.hidden = false; box.innerHTML = '<div class="st">✅ 문자로 서명을 받아 서명칸에 넣었습니다.</div>'; }
+      flash('cOk', '✅ 문자로 받은 서명을 서명칸에 넣었습니다. 확인 후 [동의서 전송]을 눌러 주세요.', 8000);
+    } else if (manual && st) st.textContent = '⏳ 아직 서명이 오지 않았습니다. (' + new Date().toTimeString().slice(0, 5) + ' 확인)';
+  } catch (e) {
+    if (st) st.textContent = '⚠ 서명을 확인하지 못했습니다(' + ((e && e.message) || '네트워크') + '). 서버를 최신으로 바꿨는지 확인해 주세요.';
+  }
+}
+let smsTimer = null;
+function smsPollSoon() {
+  if (smsTimer) return;
+  smsTimer = setInterval(() => {
+    const keys = ['self', 'proxy'].filter(k => cstate['smsTok_' + k]);
+    if (!keys.length) { clearInterval(smsTimer); smsTimer = null; return; }
+    if (document.hidden) return;
+    keys.forEach(k => smsCheck(k, false));
+  }, 8000);
 }
 /* 서명 사진(문자로 받은 것) → 배경을 하얗게, 서명 부분만 잘라서 PNG로 */
 function sigFromPhoto(file) {
@@ -1157,7 +1227,7 @@ function renderConsent() {
     <label class="check"><input type="checkbox" id="c-proxy" data-ckey="proxy"> ${F().simple ? '환자 본인 대신 가족이 서명합니다' : '대리인(가족)이 작성합니다'}</label>
     <p class="note" style="margin:0">${esc(F().proxyNote)}</p>
     <div id="proxyBox" hidden style="margin-top:12px">
-      ${F().simple ? cInput('pName', '가족 성명', { req: true }) : `<div class="row">${cInput('pName', '대리인 성명', { req: true })}${cInput('pPhone', '대리인 연락처', { type: 'tel', ph: '010-0000-0000' })}</div>`}
+      ${F().simple ? `<div class="row">${cInput('pName', '가족 성명', { req: true })}${F().sigPhoto ? cInput('pPhone', '가족 연락처 (문자 받을 번호)', { type: 'tel', ph: '010-0000-0000' }) : ''}</div>` : `<div class="row">${cInput('pName', '대리인 성명', { req: true })}${cInput('pPhone', '대리인 연락처', { type: 'tel', ph: '010-0000-0000' })}</div>`}
       ${F() === FORMS.clinic ? `<div class="row">${cInput('pBirth', '대리인 생년월일', { ph: '예: 19650312', num: true })}${cInput('pAddr', '대리인 주소', { ph: '위임장에 들어갑니다' })}</div>` : ''}
       <div class="field"><span class="label">${F().simple ? '환자와의 관계' : '신청인과의 관계'} <span class="req">*</span></span><div class="chips">${RELATIONS.map(r => `<button type="button" class="chip" aria-pressed="false" data-ckey="pRel" data-val="${esc(r)}">${esc(r)}</button>`).join('')}</div></div>
       <div id="pRelEtcBox" hidden>${cInput('pRelEtc', '기타 관계', { ph: '예: 조카' })}</div>
@@ -1188,6 +1258,8 @@ function renderConsent() {
   f.querySelectorAll('.chip[data-ckey]').forEach(b => b.addEventListener('click', onCChip));
   f.querySelectorAll('input[data-ckey]').forEach(el => el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', onCInput));
   f.querySelectorAll('[data-clear]').forEach(b => b.addEventListener('click', () => { pads[b.dataset.clear].clear(); cstate['sig_' + b.dataset.clear] = ''; cSave(); }));
+  f.querySelectorAll('[data-sms]').forEach(b => b.addEventListener('click', () => smsStart(b.dataset.sms)));
+  ['self', 'proxy'].forEach(k => { if (cstate['smsTok_' + k]) { smsShow(k); smsPollSoon(); } });
   f.querySelectorAll('input[data-photo]').forEach(inp => inp.addEventListener('change', async () => {
     const key = inp.dataset.photo, file = inp.files && inp.files[0];
     inp.value = '';

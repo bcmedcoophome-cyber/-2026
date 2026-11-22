@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-24a'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-24b'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -96,7 +96,7 @@ function setup() {
   const code = UrlFetchApp.fetch(HTML_URL, { muteHttpExceptions: true }).getResponseCode();
   Logger.log(code === 200 ? '화면: GitHub에서 불러옴' : '화면: GitHub 읽기 실패(' + code + ') → 프로젝트 안 Index 파일 사용');
   const admin = ensureAdmin_();
-  if (admin) Logger.log('★ 관리자 계정을 만들었습니다 → 이름: 관리자 / 비밀번호: ' + admin + '  (앱에서 로그인한 뒤 바로 바꾸세요)');
+  if (admin) Logger.log('★ 관리자 계정을 만들었습니다 → 아이디: ' + ADMIN_ID + ' / 비밀번호: ' + admin + '  (앱에서 로그인한 뒤 바로 바꾸세요)');
   else Logger.log('로그인 계정: ' + usersGet_().map(u => u.name + (u.role === 'admin' ? '(관리자)' : '') + (u.active ? '' : '(중지)')).join(', '));
   CacheService.getScriptCache().remove(INTAKE_CACHE_KEY);
   const people = getCalendarPeople_().people;
@@ -1037,6 +1037,7 @@ function createConsentPdf_(folder, c) {
  * ===================================================================== */
 const SESSION_DAYS = 30;
 const PW_MIN = 6;
+const ADMIN_ID = 'admin'; // 관리자 아이디
 const API_FNS = { getInitData: getInitData_, getCalendarPeople: getCalendarPeople_, saveDraft: saveDraft_, saveVisit: saveVisit_,
   getPatientCards: getPatientCards_, getTodos: getTodos_, saveTodo: saveTodo_, deleteTodo: deleteTodo_,
   getSmsSignature: getSmsSignature_, saveConsent: saveConsent_ };
@@ -1068,9 +1069,11 @@ function randomPw_() { const h = Utilities.getUuid().replace(/-/g, ''); return (
 /** 계정이 하나도 없으면 관리자 계정을 만들고 임시 비밀번호를 돌려줌 */
 function ensureAdmin_() {
   const list = usersGet_();
+  const old = list.find(x => x.name === '관리자'); // 예전 이름 → admin
+  if (old && !list.some(x => x.name === ADMIN_ID)) { old.name = ADMIN_ID; old.ver = (old.ver || 0) + 1; usersPut_(list); }
   if (list.some(u => u.role === 'admin' && u.active)) return '';
   const pw = randomPw_();
-  const u = list.find(x => x.name === '관리자') || { name: '관리자' };
+  const u = list.find(x => x.name === ADMIN_ID) || { name: ADMIN_ID };
   u.role = 'admin'; u.active = true; u.mustChange = true; setPw_(u, pw);
   usersPut_(list.filter(x => x !== u).concat(u));
   return pw;
@@ -1079,8 +1082,9 @@ function ensureAdmin_() {
 function resetAdminPassword() {
   ownerOnly_();
   const list = usersGet_();
-  let u = list.find(x => x.role === 'admin' && x.name === '관리자');
-  if (!u) { u = { name: '관리자', role: 'admin' }; list.push(u); }
+  let u = list.find(x => x.name === ADMIN_ID);
+  if (!u) { u = { name: ADMIN_ID }; list.push(u); }
+  u.role = 'admin';
   const pw = randomPw_();
   u.active = true; u.mustChange = true; setPw_(u, pw); usersPut_(list);
   Logger.log('관리자 임시 비밀번호: ' + pw + '  (로그인한 뒤 바로 바꾸세요)');
@@ -1115,10 +1119,10 @@ function pubUser_(u) { return { name: u.name, role: u.role, mustChange: !!u.must
 function login(req) {
   const name = String((req && req.name) || '').trim(), pw = String((req && req.pw) || '');
   if (!name || !pw) throw new Error('이름과 비밀번호를 입력해 주세요.');
-  const cache = CacheService.getScriptCache(), key = 'loginFail_' + Utilities.base64EncodeWebSafe(name, Utilities.Charset.UTF_8);
+  const cache = CacheService.getScriptCache(), key = 'loginFail_' + Utilities.base64EncodeWebSafe(name.toLowerCase(), Utilities.Charset.UTF_8);
   const fails = +(cache.get(key) || 0);
   if (fails >= 5) throw new Error('비밀번호를 여러 번 틀려 10분 동안 로그인할 수 없습니다. 잠시 후 다시 해 주세요.');
-  const u = usersGet_().find(x => x.name === name);
+  const u = usersGet_().find(x => x.name.toLowerCase() === name.toLowerCase());
   if (!u || !u.active || !sameText_(pwHash_(u.salt, pw), u.hash)) {
     cache.put(key, String(fails + 1), 600);
     Utilities.sleep(700);
@@ -1158,7 +1162,7 @@ function adminSaveUser_(a, me) {
   const name = String((a && a.name) || '').trim();
   if (!/^[가-힣A-Za-z0-9 ._-]{2,20}$/.test(name)) throw new Error('이름은 2~20자(한글·영문·숫자)로 적어 주세요.');
   const list = usersGet_();
-  let u = list.find(x => x.name === name);
+  let u = list.find(x => x.name === name) || list.find(x => x.name.toLowerCase() === name.toLowerCase());
   if (!u) { if (!a.pw) throw new Error('새 계정은 비밀번호가 필요합니다.'); u = { name: name, role: 'staff', active: true }; list.push(u); }
   if (a.role === 'admin' || a.role === 'staff') u.role = a.role;
   if (typeof a.active === 'boolean') { u.active = a.active; if (!a.active) u.ver = (u.ver || 0) + 1; }

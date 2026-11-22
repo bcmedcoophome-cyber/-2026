@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-23e'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-23f'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -178,25 +178,34 @@ function getCalendarPeople() {
 }
 
 /** 일정 제목에서 어르신 이름
- *  - 이모지·기호(4️⃣ ☆ ✪)와 이름 뒤에 붙은 숫자를 지우고, 시간 표현을 지운 뒤
- *  - "이름(" 꼴 중 일반 낱말이 아닌 첫 번째를 고름: "(노) 오전 9시 30분 이정자4️⃣(간호2)" → 이정자
- *  - 괄호 꼴이 없으면 장소·생년월일이 있는 일정에서만 첫 이름 낱말: "10시 한훈 첫방문" → 한훈 */
+ *  1) 시간 바로 뒤의 이름: "독O코O접종완료(최,김) 10:50-11:25 이정자4️⃣(의사)…" → 이정자,
+ *     "(노) 오전 9시 30분 이정자4️⃣(간호2)" → 이정자, "12:00~ 이정자", "11:00이정자(작업)"
+ *  2) 없으면 "이름(" 꼴 중 일반 낱말이 아닌 것: "15시 30분 안정식(작업)" → 안정식
+ *  3) 그래도 없으면 장소·생년월일이 있는 일정에서만 첫 이름 낱말: "한훈 첫방문" → 한훈 */
 function calName_(title, hasPlace) {
-  let t = String(title || '')
-    .replace(/(19|20)\d{2}\s*[년.\-\/]\s*\d{1,2}\s*[월.\-\/]\s*\d{1,2}\s*일?/g, ' ')   // 생년월일·날짜
-    .replace(/[^가-힣A-Za-z0-9\s()\[\]~:,.\/\-]/g, ' ')                       // 이모지·기호
-    .replace(/([가-힣])\d+/g, '$1 ')                                                    // 이름 뒤 숫자(4️⃣의 4)
-    .replace(/\d{1,2}\s*[:시]\s*\d{0,2}\s*분?/g, ' ')                                   // 시간
-    .replace(/오전|오후/g, ' ');
-  const re = /([가-힣]{2,4})\s*(?:님)?\s*\(/g;
+  const ok = w => w && w.length >= 2 && w.length <= 4 && CAL_STOP.indexOf(w) < 0 && !/완료$|예정$|요청$/.test(w);
+  const t0 = String(title || '')
+    .replace(/[^가-힣A-Za-z0-9\s()\[\]~:,.\/\-]/g, ' ')   // 이모지·기호(4️⃣ ☆ ✪)
+    .replace(/(19|20)\d{2}\s*[년.\-\/]\s*\d{1,2}\s*[월.\-\/]\s*\d{1,2}\s*일?/g, ' '); // 생년월일·날짜
+  // 1) 시간(범위 포함) 바로 뒤
+  const TM = '(?:오전|오후)?\\s*\\d{1,2}\\s*(?::\\s*\\d{2}|시(?:\\s*\\d{1,2}\\s*분)?)';
+  const reTime = new RegExp(TM + '(?:\\s*[-~]\\s*(?:' + TM + ')?)?\\s*[-~]?\\s*([가-힣]{2,4})', 'g');
   let m;
-  while ((m = re.exec(t))) {
+  while ((m = reTime.exec(t0))) {
     const w = m[1].replace(/님$/, '');
-    if (w.length >= 2 && CAL_STOP.indexOf(w) < 0) return w;
+    if (ok(w)) return w;
   }
+  // 2) "이름(" 꼴
+  const t = t0.replace(/([가-힣])\d+/g, '$1 ').replace(/\d{1,2}\s*[:시]\s*\d{0,2}\s*분?/g, ' ').replace(/오전|오후/g, ' ');
+  const reParen = /([가-힣]{2,4})\s*(?:님)?\s*\(/g;
+  while ((m = reParen.exec(t))) {
+    const w = m[1].replace(/님$/, '');
+    if (ok(w)) return w;
+  }
+  // 3) 장소·생년월일이 있는 일정의 첫 이름 낱말
   if (!hasPlace) return '';
-  const words = t.replace(/\([^)]*\)/g, ' ').replace(/[^가-힣\s]/g, ' ').split(/\s+/).map(x => x.replace(/님$/, '')).filter(Boolean);
-  return words.find(x => x.length >= 2 && x.length <= 4 && CAL_STOP.indexOf(x) < 0) || '';
+  const words = t.replace(/\([^)]*\)/g, ' ').replace(/[^가-힣\s]/g, ' ').split(/\s+/).map(x => x.replace(/님$/, ''));
+  return words.find(ok) || '';
 }
 
 /** 일정 설명에서 연락처·생년월일·인정번호 */

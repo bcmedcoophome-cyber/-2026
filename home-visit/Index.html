@@ -415,7 +415,7 @@ function attachSuggest(input, onPick) {
     box.className = 'suggest';
     box.innerHTML = hits.map((p, i) => {
       const sub = [p.birth, p.addr].filter(Boolean).join(' · ') || '생년월일 정보 없음';
-      const src = (p.rec ? '<span class="src">기록</span>' : '') + (p.cal ? '<span class="src">📅캘린더</span>' : '');
+      const src = (p.rec ? '<span class="src">기록</span>' : '') + (p.cal ? '<span class="src">접수</span>' : '');
       return `<button type="button" data-i="${i}"><b>${esc(p.name)}</b>${src}<small>${esc(sub)}</small></button>`;
     }).join('');
     // 손가락을 대는 순간 고름 (칸에서 포커스가 빠져 목록이 닫히기 전에)
@@ -577,7 +577,7 @@ function onPatientPicked() {
     const c = findCal(name, state.birth);
     if (c && c.birth && !state.birth) {
       state.birth = c.birth; paint(); saveDraft();
-      flash('okBanner', `${esc(name)}님 생년월일을 구글 캘린더에서 불러왔습니다.`);
+      flash('okBanner', `${esc(name)}님 생년월일을 신규방문접수에서 불러왔습니다.`);
     }
     return;
   }
@@ -1156,7 +1156,7 @@ function cFillFromCal(announce) {
   document.querySelectorAll('#cform input[data-ckey]').forEach(el => {
     if (el.type !== 'checkbox' && got.length && document.activeElement !== el) el.value = cstate[el.dataset.ckey] || '';
   });
-  flash('cOk', `📅 구글 캘린더에서 ${got.join(', ')}을(를) 채웠습니다. 맞는지 확인해 주세요.`, 8000);
+  flash('cOk', `📋 신규방문접수에서 ${got.join(', ')}을(를) 채웠습니다. 맞는지 확인해 주세요.`, 8000);
 }
 let cTimer;
 function cSave() { clearTimeout(cTimer); cTimer = setTimeout(() => LS.set(KEY_CDRAFT, cstate), 300); }

@@ -221,7 +221,7 @@ fs.mkdirSync(SHOT, { recursive: true });
   assert.equal(await page.locator('#recsBox .rec').count(), 0);
   await page.click('[data-view="write"]');
 
-  assert.match(await page.textContent('#footState'), /서버 2026-11-22/);
+  assert.match(await page.textContent('#footState'), /서버 2026-11-22b/);
   assert.deepEqual(errors, []);
 
   // 미리보기(구글 밖) 모드에서도 오류 없이 열림

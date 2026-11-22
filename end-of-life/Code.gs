@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '생애말기 활동기록';
-const APP_VERSION = '2026-11-22'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
+const APP_VERSION = '2026-11-22b'; // 서버 코드 버전 (휴대폰 화면 맨 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub의 이 앱 전용 브랜치 — main은 건드리지 않음)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/claude/end-of-life-record/end-of-life/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -495,18 +495,18 @@ function migrateInfo_(sh) {
   // 칸 이름의 점 모양이 달라도 같은 칸으로 봄 (예: '성별ㆍ나이' = '성별·나이')
   const canon = INFO_HEADERS.concat(['담당 활동가', '성별·나이']);
   const h = v[0].map(x => { const t = String(x).trim(); const c = canon.find(k => hkey_(k) === hkey_(t)); return c || t; });
-  // 사용법 칸(빈 칸 뒤 오른쪽)은 버림
-  let end = h.length;
-  for (let i = 0; i < h.length; i++) if (!h[i]) { end = i; break; }
-  const used = h.slice(0, end);
+  // 데이터 칸 = 이름이 있고 '사용법' 안내가 아닌 칸 (안내 칸 뒤에 붙은 칸도 놓치지 않음)
+  const isNote = (x, i) => !x || /^사용법/.test(x) || /^·/.test(String(v[0][i]).trim());
+  const idx = h.map((x, i) => i).filter(i => !isNote(h[i], i));
+  const used = idx.map(i => h[i]);
   const dup = used.some((x, i) => used.indexOf(x) !== i);
-  const raw = v[0].slice(0, end).map(x => String(x).trim());
-  const oddName = raw.some((x, i) => x !== used[i]);   // 점 모양이 다른 칸 이름
-  if (used.indexOf('담당 활동가') < 0 && used.indexOf('성별·나이') < 0 && !dup && !oddName) return; // 이미 새 구성
+  const oddName = idx.some(i => String(v[0][i]).trim() !== h[i]);   // 점 모양이 다른 칸 이름
+  const gap = idx.length > 0 && idx[idx.length - 1] !== idx.length - 1; // 데이터 칸 사이에 빈 칸·안내 칸이 끼어 있음
+  if (used.indexOf('담당 활동가') < 0 && used.indexOf('성별·나이') < 0 && !dup && !oddName && !gap) return; // 이미 정리된 구성
   const extra = used.filter((x, i) => canon.indexOf(x) < 0 && used.indexOf(x) === i);
   const ni = used.indexOf('어르신 이름');
-  const rows = v.slice(1).filter(r => ni >= 0 && String(r[ni] || '').trim()).map(r => {
-    const all = name => used.map((x, i) => x === name ? String(r[i] || '').trim() : '').filter(Boolean);
+  const rows = v.slice(1).filter(r => ni >= 0 && String(r[idx[ni]] || '').trim()).map(r => {
+    const all = name => used.map((x, k) => x === name ? String(r[idx[k]] || '').trim() : '').filter(Boolean);
     const g = name => all(name)[0] || '';
     const helpers = all('담당 활동가').join(',').split(/[,，/·]+/).map(x => x.trim()).filter(Boolean);
     const sa = g('성별·나이');

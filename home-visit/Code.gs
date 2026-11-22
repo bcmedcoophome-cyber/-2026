@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-23h'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-23i'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -129,6 +129,7 @@ const CAL_STOP = ['방문', '첫방문', '재방문', '정기', '정기방문', 
 const INTAKE_SHEET_ID = '1Aq6A9QTGZmANd-Apn4fpeb6khOHgViOXUbQUXNfCVX4';
 const INTAKE_TAB_GID = 2101033776;
 const INTAKE_TAB_NAME = '업무대장';
+const INTAKE_TAB_EXTRA = ['통합돌봄']; // 같은 시트의 다른 탭도 함께 읽음 (열 이름으로 찾음)
 const INTAKE_CACHE_KEY = 'intakePeople';
 const INTAKE_CACHE_SECONDS = 5 * 60;
 
@@ -143,38 +144,47 @@ function getIntakePeople_() {
   const ss = SpreadsheetApp.openById(INTAKE_SHEET_ID);
   const sh = ss.getSheets().find(x => x.getSheetId() === INTAKE_TAB_GID) || ss.getSheetByName(INTAKE_TAB_NAME);
   if (!sh) throw new Error('신규방문접수 시트에서 「' + INTAKE_TAB_NAME + '」 탭을 찾지 못했습니다.');
-  const values = sh.getDataRange().getDisplayValues();
-  const people = intakeRowsToPeople_(values);
+  const tabs = [sh.getDataRange().getDisplayValues()];
+  INTAKE_TAB_EXTRA.forEach(n => {
+    const x = ss.getSheetByName(n);
+    if (x) { try { tabs.push(x.getDataRange().getDisplayValues()); } catch (e) {} }
+  });
+  const people = intakeRowsToPeople_.apply(null, tabs);
   const result = { people: people, at: new Date().toISOString() };
   try { cache.put(INTAKE_CACHE_KEY, JSON.stringify(result), INTAKE_CACHE_SECONDS); } catch (e) {}
   return result;
 }
 
-/** 시트 값(첫 줄 = 열 이름) → [{name, birth, addr, phone, ltcNo}] */
-function intakeRowsToPeople_(values) {
-  if (!values || values.length < 2) return [];
-  const head = values[0].map(h => String(h).replace(/\s/g, ''));
-  const col = names => { for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
-  const cName = col(['이름', '어르신이름', '환자명', '성명']);
-  const cBirth = col(['주민번호/생년월일', '생년월일/주민번호', '생년월일', '주민번호']);
-  const cAddr = col(['주소']);
-  const cPhone = col(['보호자연락처', '연락처']);
-  const cGrade = col(['장기요양등급']);
-  if (cName < 0) throw new Error('「업무대장」 탭에 「이름」 열이 없습니다.');
+/** 시트 탭 값들(각 첫 줄 = 열 이름) → [{name, birth, addr, phone, ltcNo, grade}]
+ *  업무대장: 이름 · 주민번호/생년월일 · 장기요양등급 · 주소 · 보호자연락처
+ *  통합돌봄: 대상자 · 생년월일 · 장기요양(L번호) · 등급 · 연락처 · 주소 */
+function intakeRowsToPeople_() {
   const map = {}, order = [];
-  for (let r = 1; r < values.length; r++) {
-    const row = values[r];
-    const name = intakeName_(row[cName]);
-    if (!name) continue;
-    const birth = cBirth >= 0 ? intakeBirth_(row[cBirth]) : '';
-    const p = { name: name, birth: birth, addr: cAddr >= 0 ? String(row[cAddr]).replace(/\s+/g, ' ').trim() : '',
-      phone: cPhone >= 0 ? intakePhone_(row[cPhone]) : '', ltcNo: '', grade: cGrade >= 0 ? intakeGrade_(row[cGrade]) : '' };
-    const ltc = row.join(' ').match(/L\s*-?\s*(\d{10})(?!\d)/);
-    if (ltc) p.ltcNo = 'L' + ltc[1];
-    const key = name + '|' + birth;
-    if (!map[key]) { map[key] = { name: name, birth: birth, addr: '', phone: '', ltcNo: '', grade: '' }; order.push(key); }
-    ['addr', 'phone', 'ltcNo', 'grade'].forEach(k => { if (p[k]) map[key][k] = p[k]; }); // 아래 줄(최근 접수)이 우선
-  }
+  Array.prototype.slice.call(arguments).forEach(values => {
+    if (!values || values.length < 2) return;
+    const head = values[0].map(h => String(h).replace(/\s/g, ''));
+    const col = names => { for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
+    const cName = col(['이름', '대상자', '어르신이름', '이름(어르신명)', '환자명', '성명', '대상자명']);
+    const cBirth = col(['주민번호/생년월일', '생년월일/주민번호', '생년월일', '주민번호', '생년']);
+    const cBirth2 = col(['생년']);
+    const cAddr = col(['주소']);
+    const cPhone = col(['보호자연락처', '연락처']);
+    const cGrade = col(['장기요양등급', '등급']);
+    if (cName < 0) return;
+    for (let r = 1; r < values.length; r++) {
+      const row = values[r].map(v => toHalfWidth_(v));
+      const name = intakeName_(row[cName]);
+      if (!name) continue;
+      const birth = (cBirth >= 0 ? intakeBirth_(row[cBirth]) : '') || (cBirth2 >= 0 ? intakeBirth_(row[cBirth2]) : '');
+      const p = { addr: cAddr >= 0 ? String(row[cAddr]).replace(/\s+/g, ' ').trim() : '',
+        phone: cPhone >= 0 ? intakePhone_(row[cPhone]) : '', ltcNo: '', grade: cGrade >= 0 ? intakeGrade_(row[cGrade]) : '' };
+      const ltc = row.join(' ').match(/L\s*-?\s*(\d{10})(?!\d)/);
+      if (ltc) p.ltcNo = 'L' + ltc[1];
+      const key = name + '|' + birth;
+      if (!map[key]) { map[key] = { name: name, birth: birth, addr: '', phone: '', ltcNo: '', grade: '' }; order.push(key); }
+      ['addr', 'phone', 'ltcNo', 'grade'].forEach(k => { if (p[k]) map[key][k] = p[k]; }); // 아래 줄(최근)이 우선
+    }
+  });
   // 생년월일 없는 줄은 같은 이름에 생년월일 있는 분이 한 분뿐이면 그분과 합침
   const list = order.map(k => map[k]);
   return list.filter(p => {
@@ -186,11 +196,16 @@ function intakeRowsToPeople_(values) {
   });
 }
 
+/** 전각 숫자·기호(４, ／) → 보통 글자 */
+function toHalfWidth_(v) {
+  return String(v == null ? '' : v).replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+}
+
 /** "4등급 L23…" → 4등급, "3" → 3등급, "인지지원", "진행중" → 신청중 */
 function intakeGrade_(v) {
   const s = String(v || '').replace(/L\s*-?\s*\d{10}(-\d+)?/g, ' ');
   if (/인지/.test(s)) return '인지지원';
-  if (/등급\s*외/.test(s)) return '등급외';
+  if (/등급\s*외|기각/.test(s)) return '등급외';
   const m = s.match(/([1-5])\s*등급/) || s.replace(/\s/g, '').match(/^([1-5])$/);
   if (m) return m[1] + '등급';
   if (/신청|진행/.test(s)) return '신청중';

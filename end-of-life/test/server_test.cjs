@@ -149,7 +149,7 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   const mk = (id, author, elder, date, memo) => Object.assign(rec(id, { author, team: '햇살동행', meta: { elder, date }, alerts: [] }),
     { sections: [{ title: '활동 내용', items: [{ label: '대화상대', value: '자녀' }, { label: '활동 내용·특이사항', value: memo }, { label: '활동 시간', value: '30분' }] }] });
   const c1 = mk('c1', '김은아', '이정임', '2026-11-01', '말벗 해드림.');
-  c1.sections[0].items.push({ label: '지급물품', value: '돌봄키트, 활동가키트' });
+  c1.sections[0].items.push({ label: '지급물품', value: '돌봄키트, 활동키트' });
   C.api.saveVisit(c1);
   C.api.saveVisit(mk('c2', '양승미', '이정임.', '2026-11-03', '가'.repeat(200)));  // 같은 어르신(점 붙음), 다른 활동가
   C.api.saveVisit(mk('c3', '양승미', '윤묘섭', '2026-11-04', '남의 어르신'));
@@ -166,7 +166,7 @@ assert.equal(makeEnv({ githubHtml: '404: Not Found' }).api.doGet({}).html, 'LOCA
   put({ '어르신 이름': '윤묘섭', '담당 활동가1': '양승미', '성별': '남' });
   d = C.api.myData({ name: '김은아', token: tok });
   assert.deepEqual(d.mine.map(x => x.id), ['c1']);
-  assert.equal(d.mine[0].supplies, '돌봄키트, 활동가키트');
+  assert.equal(d.mine[0].supplies, '돌봄키트, 활동키트');
   const names = d.elders.map(e => e.name).sort();
   assert.deepEqual(names, ['김새분', '이정임'], '방문한 어르신 + 담당 어르신, 남의 어르신 제외');
   const ej = d.elders.find(e => e.name === '이정임');

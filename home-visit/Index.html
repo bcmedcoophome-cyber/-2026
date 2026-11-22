@@ -379,8 +379,8 @@ function allPeople() {
   const add = (p, src) => {
     if (!p || !p.name) return;
     const key = p.name + '|' + (p.birth || '');
-    const cur = map[key] || (map[key] = { name: p.name, birth: p.birth || '', addr: '', phone: '', ltcNo: '' });
-    ['addr', 'phone', 'ltcNo'].forEach(k => { if (p[k] && !cur[k]) cur[k] = p[k]; });
+    const cur = map[key] || (map[key] = { name: p.name, birth: p.birth || '', addr: '', phone: '', ltcNo: '', grade: '' });
+    ['addr', 'phone', 'ltcNo', 'grade'].forEach(k => { if (p[k] && !cur[k]) cur[k] = p[k]; });
     cur[src] = true;
   };
   calPeople.forEach(p => add(p, 'cal'));
@@ -468,6 +468,7 @@ function render() {
   attachSuggest($('f-patient'), p => {
     state.patient = p.name;
     if (p.birth) state.birth = p.birth;
+    if (p.grade && !hasValue(state.ltc)) state.ltc = p.grade;
     paint(); saveDraft();
     onPatientPicked();
   });

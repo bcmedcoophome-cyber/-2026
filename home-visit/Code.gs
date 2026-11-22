@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-23g'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-23h'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -159,6 +159,7 @@ function intakeRowsToPeople_(values) {
   const cBirth = col(['주민번호/생년월일', '생년월일/주민번호', '생년월일', '주민번호']);
   const cAddr = col(['주소']);
   const cPhone = col(['보호자연락처', '연락처']);
+  const cGrade = col(['장기요양등급']);
   if (cName < 0) throw new Error('「업무대장」 탭에 「이름」 열이 없습니다.');
   const map = {}, order = [];
   for (let r = 1; r < values.length; r++) {
@@ -167,12 +168,12 @@ function intakeRowsToPeople_(values) {
     if (!name) continue;
     const birth = cBirth >= 0 ? intakeBirth_(row[cBirth]) : '';
     const p = { name: name, birth: birth, addr: cAddr >= 0 ? String(row[cAddr]).replace(/\s+/g, ' ').trim() : '',
-      phone: cPhone >= 0 ? intakePhone_(row[cPhone]) : '', ltcNo: '' };
+      phone: cPhone >= 0 ? intakePhone_(row[cPhone]) : '', ltcNo: '', grade: cGrade >= 0 ? intakeGrade_(row[cGrade]) : '' };
     const ltc = row.join(' ').match(/L\s*-?\s*(\d{10})(?!\d)/);
     if (ltc) p.ltcNo = 'L' + ltc[1];
     const key = name + '|' + birth;
-    if (!map[key]) { map[key] = { name: name, birth: birth, addr: '', phone: '', ltcNo: '' }; order.push(key); }
-    ['addr', 'phone', 'ltcNo'].forEach(k => { if (p[k]) map[key][k] = p[k]; }); // 아래 줄(최근 접수)이 우선
+    if (!map[key]) { map[key] = { name: name, birth: birth, addr: '', phone: '', ltcNo: '', grade: '' }; order.push(key); }
+    ['addr', 'phone', 'ltcNo', 'grade'].forEach(k => { if (p[k]) map[key][k] = p[k]; }); // 아래 줄(최근 접수)이 우선
   }
   // 생년월일 없는 줄은 같은 이름에 생년월일 있는 분이 한 분뿐이면 그분과 합침
   const list = order.map(k => map[k]);
@@ -180,9 +181,20 @@ function intakeRowsToPeople_(values) {
     if (p.birth) return true;
     const same = list.filter(q => q.name === p.name && q.birth);
     if (same.length !== 1) return true;
-    ['addr', 'phone', 'ltcNo'].forEach(k => { if (p[k] && !same[0][k]) same[0][k] = p[k]; });
+    ['addr', 'phone', 'ltcNo', 'grade'].forEach(k => { if (p[k] && !same[0][k]) same[0][k] = p[k]; });
     return false;
   });
+}
+
+/** "4등급 L23…" → 4등급, "3" → 3등급, "인지지원", "진행중" → 신청중 */
+function intakeGrade_(v) {
+  const s = String(v || '').replace(/L\s*-?\s*\d{10}(-\d+)?/g, ' ');
+  if (/인지/.test(s)) return '인지지원';
+  if (/등급\s*외/.test(s)) return '등급외';
+  const m = s.match(/([1-5])\s*등급/) || s.replace(/\s/g, '').match(/^([1-5])$/);
+  if (m) return m[1] + '등급';
+  if (/신청|진행/.test(s)) return '신청중';
+  return '';
 }
 
 /** "이한구B" → 이한구, "임헌차 " → 임헌차, "홍길동님" → 홍길동 */

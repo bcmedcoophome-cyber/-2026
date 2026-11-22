@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-23b'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-23c'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -121,7 +121,7 @@ const CAL_SKIP = /공휴일|휴일|생일|기념일|holiday|birthday|contacts/i;
 // 이름이 아닌 낱말 (제목에서 이름을 찾을 때 건너뜀)
 const CAL_STOP = ['방문', '첫방문', '재방문', '정기', '정기방문', '수시', '수시방문', '상담', '진료', '간호', '작업', '치료',
   '작업치료', '회의', '교육', '점심', '출장', '휴가', '연차', '반차', '오전', '오후', '재택', '통합돌봄', '임종돌봄', '동행', '병원', '예정',
-  '생년월일', '생일', '신규', '어르신', '대상자', '환자'];
+  '생년월일', '생일', '신규', '어르신', '대상자', '환자', '등본', '매주', '추가', '조합원', '요청', '처방', '주사', '수액', '영양제'];
 
 function getCalendarPeople() {
   const cache = CacheService.getScriptCache();
@@ -172,15 +172,26 @@ function getCalendarPeople() {
   return result;
 }
 
-/** 일정 제목에서 어르신 이름: 시간 표현을 지우고 "이름(" 꼴을 찾음. 없으면 장소가 있는 일정에서만 첫 이름 낱말 */
+/** 일정 제목에서 어르신 이름
+ *  - 이모지·기호(4️⃣ ☆ ✪)와 이름 뒤에 붙은 숫자를 지우고, 시간 표현을 지운 뒤
+ *  - "이름(" 꼴 중 일반 낱말이 아닌 첫 번째를 고름: "(노) 오전 9시 30분 이정자4️⃣(간호2)" → 이정자
+ *  - 괄호 꼴이 없으면 장소·생년월일이 있는 일정에서만 첫 이름 낱말: "10시 한훈 첫방문" → 한훈 */
 function calName_(title, hasPlace) {
-  const t = String(title || '').replace(/(19|20)\d{2}\s*[년.\-\/]\s*\d{1,2}\s*[월.\-\/]\s*\d{1,2}\s*일?/g, ' ').replace(/\d{1,2}\s*[:시]\s*\d{0,2}\s*분?/g, ' ').replace(/[~\-]\s*\d.*?(?=[가-힣]|$)/g, ' ');
-  const m = t.match(/([가-힣]{2,4})\s*(?:님)?\s*\(/);
-  if (m) return m[1].replace(/님$/, '');
+  let t = String(title || '')
+    .replace(/(19|20)\d{2}\s*[년.\-\/]\s*\d{1,2}\s*[월.\-\/]\s*\d{1,2}\s*일?/g, ' ')   // 생년월일·날짜
+    .replace(/[^가-힣A-Za-z0-9\s()\[\]~:,.\/\-]/g, ' ')                       // 이모지·기호
+    .replace(/([가-힣])\d+/g, '$1 ')                                                    // 이름 뒤 숫자(4️⃣의 4)
+    .replace(/\d{1,2}\s*[:시]\s*\d{0,2}\s*분?/g, ' ')                                   // 시간
+    .replace(/오전|오후/g, ' ');
+  const re = /([가-힣]{2,4})\s*(?:님)?\s*\(/g;
+  let m;
+  while ((m = re.exec(t))) {
+    const w = m[1].replace(/님$/, '');
+    if (w.length >= 2 && CAL_STOP.indexOf(w) < 0) return w;
+  }
   if (!hasPlace) return '';
-  const words = t.replace(/[^가-힣\s]/g, ' ').split(/\s+/).map(w => w.replace(/님$/, '')).filter(Boolean);
-  const w = words.find(x => x.length >= 2 && x.length <= 4 && CAL_STOP.indexOf(x) < 0);
-  return w || '';
+  const words = t.replace(/\([^)]*\)/g, ' ').replace(/[^가-힣\s]/g, ' ').split(/\s+/).map(x => x.replace(/님$/, '')).filter(Boolean);
+  return words.find(x => x.length >= 2 && x.length <= 4 && CAL_STOP.indexOf(x) < 0) || '';
 }
 
 /** 일정 설명에서 연락처·생년월일·인정번호 */
@@ -189,7 +200,7 @@ function calInfo_(desc) {
   const d = String(desc).replace(/<[^>]+>/g, '\n'); // 설명이 HTML로 저장된 경우
   const phone = d.match(/01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/);
   if (phone) out.phone = phone[0].replace(/[.\s]/g, '-');
-  const rrn = d.match(/(\d{2})(\d{2})(\d{2})\s*-\s*([1-8])\d{0,6}/);
+  const rrn = d.match(/(?:^|[^\d])(\d{2})(\d{2})(\d{2})\s*-\s*([1-8])\d{0,6}/);
   if (rrn) {
     const century = '34'.indexOf(rrn[4]) >= 0 || '78'.indexOf(rrn[4]) >= 0 ? '20' : '19';
     out.birth = century + rrn[1] + '-' + rrn[2] + '-' + rrn[3];
@@ -206,7 +217,7 @@ function calInfo_(desc) {
       }
     }
   }
-  const ltc = d.match(/L\s*-?\s*(\d{10})/);
+  const ltc = d.match(/L\s*-?\s*(\d{10})(?!\d)/);
   if (ltc) out.ltcNo = 'L' + ltc[1];
   const addr = d.match(/주소\s*[:：]\s*([^\n]+)/);
   if (addr) out.addr = addr[1].trim();

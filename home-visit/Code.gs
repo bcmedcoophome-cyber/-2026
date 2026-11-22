@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-23d'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-23e'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -103,13 +103,13 @@ function setup() {
     try { n = use ? cal.getEvents(new Date(now - CAL_DAYS_BACK * 864e5), new Date(now + CAL_DAYS_AHEAD * 864e5)).length : 0; } catch (e) {}
     Logger.log('캘린더 「' + cal.getName() + '」 ' + (use ? '읽음 · 일정 ' + n + '개' : '(읽지 않음)'));
   });
-  if (!reading.length) Logger.log('⚠ 이름에 "BC"가 들어간 캘린더를 찾지 못했습니다. 센터 계정 캘린더 목록에 BC 캘린더가 있는지 확인해 주세요.');
+
   const people = getCalendarPeople().people;
   Logger.log('캘린더에서 찾은 어르신: ' + people.length + '명 (예: ' + people.slice(0, 5).map(p => p.name).join(', ') + ')');
 }
 
 /* =====================================================================
- *  구글 캘린더에서 어르신 정보 읽기 — 센터 계정의 「BC」 캘린더만 읽음 (개인 캘린더는 읽지 않음)
+ *  구글 캘린더에서 어르신 정보 읽기 — 센터 계정(bcmedcoophome)에 보이는 캘린더 전체 (가족·공휴일·생일 캘린더 제외)
  *  - 제목  "15시 30분 홍길동(작업)" → 이름  (괄호가 없으면 장소가 적힌 일정에서만 "10시 홍길동 첫방문" → 홍길동)
  *  - 장소  → 주소
  *  - 설명  "연락처 : 010-…", "주민등록번호 : 450312-2……" → 연락처, 생년월일(번호 자체는 저장하지 않음),
@@ -119,11 +119,10 @@ const CAL_DAYS_BACK = 400;   // 지난 일정 며칠까지
 const CAL_DAYS_AHEAD = 90;   // 앞으로의 일정 며칠까지
 const CAL_CACHE_KEY = 'calPeople';
 const CAL_CACHE_SECONDS = 30 * 60;
-const CAL_ONLY = /BC/i; // 이 글자가 이름에 들어간 캘린더만 읽음 (센터 BC 캘린더)
-const CAL_SKIP = /공휴일|휴일|생일|기념일|holiday|birthday|contacts/i; // 읽지 않을 캘린더 이름
-/** 읽을 캘린더: 이름에 BC가 들어간 센터 캘린더만 */
+const CAL_SKIP = /^가족$|공휴일|휴일|생일|기념일|holiday|birthday|contacts/i; // 읽지 않을 캘린더 이름
+/** 읽을 캘린더: 센터 계정에 보이는 캘린더 전체 (위 CAL_SKIP 이름 제외) */
 function calendarsToRead_() {
-  return CalendarApp.getAllCalendars().filter(cal => CAL_ONLY.test(cal.getName()) && !CAL_SKIP.test(cal.getName()));
+  return CalendarApp.getAllCalendars().filter(cal => !CAL_SKIP.test(cal.getName()));
 }
 // 이름이 아닌 낱말 (제목에서 이름을 찾을 때 건너뜀)
 const CAL_STOP = ['방문', '첫방문', '재방문', '정기', '정기방문', '수시', '수시방문', '상담', '진료', '간호', '작업', '치료',

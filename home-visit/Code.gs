@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-23f'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-23g'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -94,18 +94,9 @@ function setup() {
   Logger.log('기록 시트: ' + ss.getUrl());
   const code = UrlFetchApp.fetch(HTML_URL, { muteHttpExceptions: true }).getResponseCode();
   Logger.log(code === 200 ? '화면: GitHub에서 불러옴' : '화면: GitHub 읽기 실패(' + code + ') → 프로젝트 안 Index 파일 사용');
-  CacheService.getScriptCache().remove(CAL_CACHE_KEY);
-  const now = Date.now();
-  const reading = calendarsToRead_().map(cal => cal.getId());
-  CalendarApp.getAllCalendars().forEach(cal => {
-    const use = reading.indexOf(cal.getId()) >= 0;
-    let n = 0;
-    try { n = use ? cal.getEvents(new Date(now - CAL_DAYS_BACK * 864e5), new Date(now + CAL_DAYS_AHEAD * 864e5)).length : 0; } catch (e) {}
-    Logger.log('캘린더 「' + cal.getName() + '」 ' + (use ? '읽음 · 일정 ' + n + '개' : '(읽지 않음)'));
-  });
-
+  CacheService.getScriptCache().remove(INTAKE_CACHE_KEY);
   const people = getCalendarPeople().people;
-  Logger.log('캘린더에서 찾은 어르신: ' + people.length + '명 (예: ' + people.slice(0, 5).map(p => p.name).join(', ') + ')');
+  Logger.log('「신규방문접수」 시트에서 읽은 어르신: ' + people.length + '명 (예: ' + people.slice(-5).map(p => p.name + ' ' + p.birth).join(', ') + ')');
 }
 
 /* =====================================================================
@@ -129,7 +120,105 @@ const CAL_STOP = ['방문', '첫방문', '재방문', '정기', '정기방문', 
   '작업치료', '회의', '교육', '점심', '출장', '휴가', '연차', '반차', '오전', '오후', '재택', '통합돌봄', '임종돌봄', '동행', '병원', '예정',
   '생년월일', '생일', '신규', '어르신', '대상자', '환자', '등본', '매주', '추가', '조합원', '요청', '처방', '주사', '수액', '영양제'];
 
+/* =====================================================================
+ *  어르신 정보: 센터 「신규방문접수」 시트의 「업무대장」 탭에서 읽기
+ *  (캘린더 제목은 쓰는 방식이 제각각이라 접수 시트를 씀)
+ *  열 이름으로 찾음: 이름 · 주민번호/생년월일 · 주소 · 보호자연락처 · 장기요양등급(L번호)
+ *  주민번호는 생년월일 계산에만 쓰고 저장·전송하지 않음
+ * ===================================================================== */
+const INTAKE_SHEET_ID = '1Aq6A9QTGZmANd-Apn4fpeb6khOHgViOXUbQUXNfCVX4';
+const INTAKE_TAB_GID = 2101033776;
+const INTAKE_TAB_NAME = '업무대장';
+const INTAKE_CACHE_KEY = 'intakePeople';
+const INTAKE_CACHE_SECONDS = 5 * 60;
+
+/** 화면이 부르는 이름은 그대로 (예전 화면과 호환) */
 function getCalendarPeople() {
+  return getIntakePeople_();
+}
+
+function getIntakePeople_() {
+  const cache = CacheService.getScriptCache();
+  try { const hit = cache.get(INTAKE_CACHE_KEY); if (hit) return JSON.parse(hit); } catch (e) {}
+  const ss = SpreadsheetApp.openById(INTAKE_SHEET_ID);
+  const sh = ss.getSheets().find(x => x.getSheetId() === INTAKE_TAB_GID) || ss.getSheetByName(INTAKE_TAB_NAME);
+  if (!sh) throw new Error('신규방문접수 시트에서 「' + INTAKE_TAB_NAME + '」 탭을 찾지 못했습니다.');
+  const values = sh.getDataRange().getDisplayValues();
+  const people = intakeRowsToPeople_(values);
+  const result = { people: people, at: new Date().toISOString() };
+  try { cache.put(INTAKE_CACHE_KEY, JSON.stringify(result), INTAKE_CACHE_SECONDS); } catch (e) {}
+  return result;
+}
+
+/** 시트 값(첫 줄 = 열 이름) → [{name, birth, addr, phone, ltcNo}] */
+function intakeRowsToPeople_(values) {
+  if (!values || values.length < 2) return [];
+  const head = values[0].map(h => String(h).replace(/\s/g, ''));
+  const col = names => { for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
+  const cName = col(['이름', '어르신이름', '환자명', '성명']);
+  const cBirth = col(['주민번호/생년월일', '생년월일/주민번호', '생년월일', '주민번호']);
+  const cAddr = col(['주소']);
+  const cPhone = col(['보호자연락처', '연락처']);
+  if (cName < 0) throw new Error('「업무대장」 탭에 「이름」 열이 없습니다.');
+  const map = {}, order = [];
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    const name = intakeName_(row[cName]);
+    if (!name) continue;
+    const birth = cBirth >= 0 ? intakeBirth_(row[cBirth]) : '';
+    const p = { name: name, birth: birth, addr: cAddr >= 0 ? String(row[cAddr]).replace(/\s+/g, ' ').trim() : '',
+      phone: cPhone >= 0 ? intakePhone_(row[cPhone]) : '', ltcNo: '' };
+    const ltc = row.join(' ').match(/L\s*-?\s*(\d{10})(?!\d)/);
+    if (ltc) p.ltcNo = 'L' + ltc[1];
+    const key = name + '|' + birth;
+    if (!map[key]) { map[key] = { name: name, birth: birth, addr: '', phone: '', ltcNo: '' }; order.push(key); }
+    ['addr', 'phone', 'ltcNo'].forEach(k => { if (p[k]) map[key][k] = p[k]; }); // 아래 줄(최근 접수)이 우선
+  }
+  // 생년월일 없는 줄은 같은 이름에 생년월일 있는 분이 한 분뿐이면 그분과 합침
+  const list = order.map(k => map[k]);
+  return list.filter(p => {
+    if (p.birth) return true;
+    const same = list.filter(q => q.name === p.name && q.birth);
+    if (same.length !== 1) return true;
+    ['addr', 'phone', 'ltcNo'].forEach(k => { if (p[k] && !same[0][k]) same[0][k] = p[k]; });
+    return false;
+  });
+}
+
+/** "이한구B" → 이한구, "임헌차 " → 임헌차, "홍길동님" → 홍길동 */
+function intakeName_(v) {
+  const n = String(v || '').replace(/\([^)]*\)/g, '').replace(/[^가-힣]/g, '').replace(/님$/, '');
+  return n.length >= 2 && n.length <= 5 ? n : '';
+}
+
+/** "521220", "500515-1221225", "1950-05-15", "1950. 5. 15" → YYYY-MM-DD */
+function intakeBirth_(v) {
+  const s = String(v || '');
+  const pad = x => ('0' + x).slice(-2);
+  const ok = (mo, d) => mo >= 1 && mo <= 12 && d >= 1 && d <= 31;
+  let m = s.match(/(19\d{2}|20\d{2})\s*[년.\-\/]\s*(\d{1,2})\s*[월.\-\/]\s*(\d{1,2})/);
+  if (m && ok(+m[2], +m[3])) return m[1] + '-' + pad(+m[2]) + '-' + pad(+m[3]);
+  m = s.match(/(19\d{2}|20\d{2})(\d{2})(\d{2})(?!\d)/);
+  if (m && ok(+m[2], +m[3])) return m[1] + '-' + m[2] + '-' + m[3];
+  m = s.match(/(?:^|[^\d])(\d{2})(\d{2})(\d{2})(?:\s*-?\s*([1-8]))?/);
+  if (m && ok(+m[2], +m[3])) {
+    const century = m[4] && '3478'.indexOf(m[4]) >= 0 ? '20' : '19';
+    return century + m[1] + '-' + m[2] + '-' + m[3];
+  }
+  return '';
+}
+
+/** "김덕심 01023970118" → 010-2397-0118 */
+function intakePhone_(v) {
+  const s = String(v || '');
+  let m = s.match(/(01[016789])[-.\s)]*(\d{3,4})[-.\s]*(\d{4})/);
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  m = s.match(/(0\d{1,2})[-.\s)]*(\d{3,4})[-.\s]*(\d{4})/);
+  return m ? m[1] + '-' + m[2] + '-' + m[3] : '';
+}
+
+/* (예전) 캘린더에서 읽던 방식 — 지금은 쓰지 않음 */
+function getCalendarPeopleFromCalendar_() {
   const cache = CacheService.getScriptCache();
   try { const hit = cache.get(CAL_CACHE_KEY); if (hit) return JSON.parse(hit); } catch (e) {}
   const now = Date.now();

@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-22'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-23'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -95,12 +95,20 @@ function setup() {
   const code = UrlFetchApp.fetch(HTML_URL, { muteHttpExceptions: true }).getResponseCode();
   Logger.log(code === 200 ? '화면: GitHub에서 불러옴' : '화면: GitHub 읽기 실패(' + code + ') → 프로젝트 안 Index 파일 사용');
   CacheService.getScriptCache().remove(CAL_CACHE_KEY);
-  Logger.log('캘린더에서 찾은 어르신: ' + getCalendarPeople().people.length + '명');
+  const now = Date.now();
+  CalendarApp.getAllCalendars().forEach(cal => {
+    const skip = CAL_SKIP.test(cal.getName());
+    let n = 0;
+    try { n = skip ? 0 : cal.getEvents(new Date(now - CAL_DAYS_BACK * 864e5), new Date(now + CAL_DAYS_AHEAD * 864e5)).length; } catch (e) {}
+    Logger.log('캘린더 「' + cal.getName() + '」 ' + (skip ? '(건너뜀)' : '일정 ' + n + '개'));
+  });
+  const people = getCalendarPeople().people;
+  Logger.log('캘린더에서 찾은 어르신: ' + people.length + '명 (예: ' + people.slice(0, 5).map(p => p.name).join(', ') + ')');
 }
 
 /* =====================================================================
- *  구글 캘린더(센터 계정 기본 캘린더)에서 어르신 정보 읽기
- *  - 제목  "15시 30분 홍길동(작업)" → 이름
+ *  구글 캘린더(센터 계정이 가진 모든 캘린더, 공휴일·생일 제외)에서 어르신 정보 읽기
+ *  - 제목  "15시 30분 홍길동(작업)" → 이름  (괄호가 없으면 장소가 적힌 일정에서만 "10시 홍길동 첫방문" → 홍길동)
  *  - 장소  → 주소
  *  - 설명  "연락처 : 010-…", "주민등록번호 : 450312-2……" → 연락처, 생년월일(번호 자체는 저장하지 않음),
  *          "L0012345678" → 장기요양인정번호
@@ -109,17 +117,26 @@ const CAL_DAYS_BACK = 400;   // 지난 일정 며칠까지
 const CAL_DAYS_AHEAD = 90;   // 앞으로의 일정 며칠까지
 const CAL_CACHE_KEY = 'calPeople';
 const CAL_CACHE_SECONDS = 30 * 60;
+const CAL_SKIP = /공휴일|휴일|생일|기념일|holiday|birthday|contacts/i; // 읽지 않을 캘린더 이름
+// 이름이 아닌 낱말 (제목에서 이름을 찾을 때 건너뜀)
+const CAL_STOP = ['방문', '첫방문', '재방문', '정기', '정기방문', '수시', '수시방문', '상담', '진료', '간호', '작업', '치료',
+  '작업치료', '회의', '교육', '점심', '출장', '휴가', '연차', '반차', '오전', '오후', '재택', '통합돌봄', '임종돌봄', '동행', '병원', '예정'];
 
 function getCalendarPeople() {
   const cache = CacheService.getScriptCache();
   try { const hit = cache.get(CAL_CACHE_KEY); if (hit) return JSON.parse(hit); } catch (e) {}
   const now = Date.now();
-  const events = CalendarApp.getDefaultCalendar().getEvents(
-    new Date(now - CAL_DAYS_BACK * 864e5), new Date(now + CAL_DAYS_AHEAD * 864e5));
+  const from = new Date(now - CAL_DAYS_BACK * 864e5), to = new Date(now + CAL_DAYS_AHEAD * 864e5);
+  let events = [];
+  CalendarApp.getAllCalendars().forEach(cal => {
+    if (CAL_SKIP.test(cal.getName())) return;
+    try { events = events.concat(cal.getEvents(from, to)); } catch (e) { /* 읽을 수 없는 캘린더는 건너뜀 */ }
+  });
   // 이름별로 일정 모으기 (최근 일정이 뒤로)
   const byName = {};
   events.forEach(ev => {
-    const name = calName_(ev.getTitle());
+    const place = String(ev.getLocation() || '').trim();
+    const name = calName_(ev.getTitle(), !!place);
     if (!name) return;
     const info = calInfo_(ev.getDescription() || '');
     info.addr = String(ev.getLocation() || '').trim() || info.addr || '';
@@ -150,11 +167,15 @@ function getCalendarPeople() {
   return result;
 }
 
-/** 일정 제목에서 어르신 이름: 시간 표현을 지우고 "이름(" 꼴을 찾음 */
-function calName_(title) {
+/** 일정 제목에서 어르신 이름: 시간 표현을 지우고 "이름(" 꼴을 찾음. 없으면 장소가 있는 일정에서만 첫 이름 낱말 */
+function calName_(title, hasPlace) {
   const t = String(title || '').replace(/\d{1,2}\s*[:시]\s*\d{0,2}\s*분?/g, ' ').replace(/[~\-]\s*\d.*?(?=[가-힣]|$)/g, ' ');
-  const m = t.match(/([가-힣]{2,4})\s*\(/);
-  return m ? m[1] : '';
+  const m = t.match(/([가-힣]{2,4})\s*(?:님)?\s*\(/);
+  if (m) return m[1].replace(/님$/, '');
+  if (!hasPlace) return '';
+  const words = t.replace(/[^가-힣\s]/g, ' ').split(/\s+/).map(w => w.replace(/님$/, '')).filter(Boolean);
+  const w = words.find(x => x.length >= 2 && x.length <= 4 && CAL_STOP.indexOf(x) < 0);
+  return w || '';
 }
 
 /** 일정 설명에서 연락처·생년월일·인정번호 */

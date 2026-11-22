@@ -362,7 +362,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-11-23d'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-11-23e'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -1106,7 +1106,7 @@ function sigHtml(key, label) {
 /* ---------- 문자로 서명 받기 ----------
  * 별도 「문자서명」 앱 링크(서명 칸만 있음, 개인정보 없음)를 문자로 보내고,
  * 받는 분이 서명하면 서명란에 자동으로 들어옴. 개인정보 입력은 사회복지사가 이 화면에서 함. */
-const SIGN_APP_ID = ''; // 「문자서명」 앱 배포 ID (주소 …/macros/s/[여기]/exec)
+const SIGN_APP_ID = 'AKfycbxgkhTyqVEupmpLAyQFeOhflvIq7eKDOT-KeBqZC49tTnaf0mCsn3L1xzW-PdNUdqoTxg'; // 「문자서명」 앱 배포 ID (주소 …/macros/s/[여기]/exec)
 function signAppUrl() { return SIGN_APP_ID ? ['https:', '', 'script.google.com', 'macros', 's', SIGN_APP_ID, 'exec'].join('/') : ''; }
 function newSignToken() {
   const a = new Uint8Array(12); crypto.getRandomValues(a);

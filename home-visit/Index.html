@@ -305,9 +305,9 @@
 <div id="loginView" hidden>
   <div class="box">
     <h2>🏠 재택의료 방문상담</h2>
-    <p class="note">센터 직원만 쓸 수 있습니다. 이름과 비밀번호로 로그인해 주세요.</p>
+    <p class="note">센터 직원만 쓸 수 있습니다. 아이디와 비밀번호로 로그인해 주세요.</p>
     <form id="loginForm" autocomplete="on">
-      <div class="field"><label for="lgName">이름</label><input type="text" id="lgName" autocomplete="username" placeholder="예: 김민정"></div>
+      <div class="field"><label for="lgName">아이디 (직원은 이름)</label><input type="text" id="lgName" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="예: 김민정 / 관리자는 admin"></div>
       <div class="field"><label for="lgPw">비밀번호</label><input type="password" id="lgPw" autocomplete="current-password"></div>
       <button class="btn primary" type="submit" id="lgBtn">로그인</button>
       <div class="login-err" id="lgErr"></div>
@@ -409,7 +409,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-11-24a'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-11-24b'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -734,7 +734,7 @@ function needLogin() {
 async function doLogin(e) {
   e.preventDefault();
   const name = $('lgName').value.trim(), pw = $('lgPw').value;
-  if (!name || !pw) { $('lgErr').textContent = '이름과 비밀번호를 입력해 주세요.'; return; }
+  if (!name || !pw) { $('lgErr').textContent = '아이디와 비밀번호를 입력해 주세요.'; return; }
   $('lgBtn').disabled = true; $('lgBtn').textContent = '확인 중…'; $('lgErr').textContent = '';
   try {
     const r = await gas('login', { name: name, pw: pw });
@@ -747,8 +747,8 @@ async function doLogin(e) {
 }
 function onLoggedIn(r) {
   LS.set(KEY_TOKEN, r.token); me = r.user; LS.set(KEY_USER, me); LS.set(KEY_LOGIN_NAME, me.name);
-  // 로그인한 이름을 작성자로 ('관리자' 공용 계정은 제외 — 작성자 이름이 드라이브 폴더 이름이 됨)
-  if (me.name !== '관리자') {
+  // 로그인한 이름을 작성자로 (admin 공용 계정은 제외 — 작성자 이름이 드라이브 폴더 이름이 됨)
+  if (me.name !== 'admin' && me.name !== '관리자') {
     LS.set(KEY_AUTHOR, me.name);
     if (!hasValue(state.author)) { state.author = me.name; paint(); saveDraft(); }
   }

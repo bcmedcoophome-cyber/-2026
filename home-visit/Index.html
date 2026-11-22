@@ -173,7 +173,7 @@
   .sigwrap canvas { display: block; width: 100%; height: 160px; border-radius: 12px; }
   .sigwrap .ph { position: absolute; inset: 0; display: grid; place-items: center; color: #9aa0a6; pointer-events: none; font-size: 15px; }
   .sigbtns { display: flex; gap: 8px; margin-top: 8px; } .sigbtns > * { flex: 1; text-align: center; }
-  .smsbox { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: #eef3ff; font-size: 14px; line-height: 1.5; }
+  .smsbox { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--brand-soft); color: var(--ink); font-size: 14px; line-height: 1.5; }
   .smsbox .btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
   .smsbox .st { font-weight: 700; }
   .sigrow { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 13px; color: var(--muted); }
@@ -362,7 +362,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-11-23e'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-11-23f'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -1153,7 +1153,10 @@ async function smsCheck(key, manual) {
       flash('cOk', '✅ 문자로 받은 서명을 서명칸에 넣었습니다. 확인 후 [동의서 전송]을 눌러 주세요.', 8000);
     } else if (manual && st) st.textContent = '⏳ 아직 서명이 오지 않았습니다. (' + new Date().toTimeString().slice(0, 5) + ' 확인)';
   } catch (e) {
-    if (st) st.textContent = '⚠ 서명을 확인하지 못했습니다(' + ((e && e.message) || '네트워크') + '). 서버를 최신으로 바꿨는지 확인해 주세요.';
+    const old = /is not a function/.test(String(e && e.message));
+    if (st) st.textContent = old
+      ? '⚠ 앱이 옛 서버로 열려 있습니다. 앱을 완전히 닫았다가 다시 열어 주세요. (화면 맨 아래 「서버 2026-11-23k」 이상이어야 합니다)'
+      : '⚠ 서명을 확인하지 못했습니다(' + ((e && e.message) || '네트워크') + '). 잠시 후 [받은 서명 확인]을 다시 눌러 주세요.';
   }
 }
 let smsTimer = null;

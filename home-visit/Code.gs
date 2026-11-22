@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-23c'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-23d'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -96,18 +96,20 @@ function setup() {
   Logger.log(code === 200 ? '화면: GitHub에서 불러옴' : '화면: GitHub 읽기 실패(' + code + ') → 프로젝트 안 Index 파일 사용');
   CacheService.getScriptCache().remove(CAL_CACHE_KEY);
   const now = Date.now();
+  const reading = calendarsToRead_().map(cal => cal.getId());
   CalendarApp.getAllCalendars().forEach(cal => {
-    const skip = CAL_SKIP.test(cal.getName());
+    const use = reading.indexOf(cal.getId()) >= 0;
     let n = 0;
-    try { n = skip ? 0 : cal.getEvents(new Date(now - CAL_DAYS_BACK * 864e5), new Date(now + CAL_DAYS_AHEAD * 864e5)).length; } catch (e) {}
-    Logger.log('캘린더 「' + cal.getName() + '」 ' + (skip ? '(건너뜀)' : '일정 ' + n + '개'));
+    try { n = use ? cal.getEvents(new Date(now - CAL_DAYS_BACK * 864e5), new Date(now + CAL_DAYS_AHEAD * 864e5)).length : 0; } catch (e) {}
+    Logger.log('캘린더 「' + cal.getName() + '」 ' + (use ? '읽음 · 일정 ' + n + '개' : '(읽지 않음)'));
   });
+  if (!reading.length) Logger.log('⚠ 이름에 "BC"가 들어간 캘린더를 찾지 못했습니다. 센터 계정 캘린더 목록에 BC 캘린더가 있는지 확인해 주세요.');
   const people = getCalendarPeople().people;
   Logger.log('캘린더에서 찾은 어르신: ' + people.length + '명 (예: ' + people.slice(0, 5).map(p => p.name).join(', ') + ')');
 }
 
 /* =====================================================================
- *  구글 캘린더(센터 계정이 가진 모든 캘린더, 공휴일·생일 제외)에서 어르신 정보 읽기
+ *  구글 캘린더에서 어르신 정보 읽기 — 센터 계정의 「BC」 캘린더만 읽음 (개인 캘린더는 읽지 않음)
  *  - 제목  "15시 30분 홍길동(작업)" → 이름  (괄호가 없으면 장소가 적힌 일정에서만 "10시 홍길동 첫방문" → 홍길동)
  *  - 장소  → 주소
  *  - 설명  "연락처 : 010-…", "주민등록번호 : 450312-2……" → 연락처, 생년월일(번호 자체는 저장하지 않음),
@@ -117,7 +119,12 @@ const CAL_DAYS_BACK = 400;   // 지난 일정 며칠까지
 const CAL_DAYS_AHEAD = 90;   // 앞으로의 일정 며칠까지
 const CAL_CACHE_KEY = 'calPeople';
 const CAL_CACHE_SECONDS = 30 * 60;
+const CAL_ONLY = /BC/i; // 이 글자가 이름에 들어간 캘린더만 읽음 (센터 BC 캘린더)
 const CAL_SKIP = /공휴일|휴일|생일|기념일|holiday|birthday|contacts/i; // 읽지 않을 캘린더 이름
+/** 읽을 캘린더: 이름에 BC가 들어간 센터 캘린더만 */
+function calendarsToRead_() {
+  return CalendarApp.getAllCalendars().filter(cal => CAL_ONLY.test(cal.getName()) && !CAL_SKIP.test(cal.getName()));
+}
 // 이름이 아닌 낱말 (제목에서 이름을 찾을 때 건너뜀)
 const CAL_STOP = ['방문', '첫방문', '재방문', '정기', '정기방문', '수시', '수시방문', '상담', '진료', '간호', '작업', '치료',
   '작업치료', '회의', '교육', '점심', '출장', '휴가', '연차', '반차', '오전', '오후', '재택', '통합돌봄', '임종돌봄', '동행', '병원', '예정',
@@ -129,8 +136,7 @@ function getCalendarPeople() {
   const now = Date.now();
   const from = new Date(now - CAL_DAYS_BACK * 864e5), to = new Date(now + CAL_DAYS_AHEAD * 864e5);
   let events = [];
-  CalendarApp.getAllCalendars().forEach(cal => {
-    if (CAL_SKIP.test(cal.getName())) return;
+  calendarsToRead_().forEach(cal => {
     try { events = events.concat(cal.getEvents(from, to)); } catch (e) { /* 읽을 수 없는 캘린더는 건너뜀 */ }
   });
   // 이름별로 일정 모으기 (최근 일정이 뒤로)

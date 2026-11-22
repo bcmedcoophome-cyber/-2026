@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-23i'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-23j'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -129,7 +129,8 @@ const CAL_STOP = ['방문', '첫방문', '재방문', '정기', '정기방문', 
 const INTAKE_SHEET_ID = '1Aq6A9QTGZmANd-Apn4fpeb6khOHgViOXUbQUXNfCVX4';
 const INTAKE_TAB_GID = 2101033776;
 const INTAKE_TAB_NAME = '업무대장';
-const INTAKE_TAB_EXTRA = ['통합돌봄']; // 같은 시트의 다른 탭도 함께 읽음 (열 이름으로 찾음)
+// 같은 시트에서 함께 읽는 탭 (뒤에 읽는 탭의 값이 우선 → 업무대장을 마지막에 읽음)
+const INTAKE_TAB_EXTRA = ['설문지 응답 시트1', '설문지 응답 시트2', '통합돌봄'];
 const INTAKE_CACHE_KEY = 'intakePeople';
 const INTAKE_CACHE_SECONDS = 5 * 60;
 
@@ -142,13 +143,11 @@ function getIntakePeople_() {
   const cache = CacheService.getScriptCache();
   try { const hit = cache.get(INTAKE_CACHE_KEY); if (hit) return JSON.parse(hit); } catch (e) {}
   const ss = SpreadsheetApp.openById(INTAKE_SHEET_ID);
-  const sh = ss.getSheets().find(x => x.getSheetId() === INTAKE_TAB_GID) || ss.getSheetByName(INTAKE_TAB_NAME);
-  if (!sh) throw new Error('신규방문접수 시트에서 「' + INTAKE_TAB_NAME + '」 탭을 찾지 못했습니다.');
-  const tabs = [sh.getDataRange().getDisplayValues()];
-  INTAKE_TAB_EXTRA.forEach(n => {
-    const x = ss.getSheetByName(n);
-    if (x) { try { tabs.push(x.getDataRange().getDisplayValues()); } catch (e) {} }
-  });
+  const read = x => { try { return x.getDataRange().getDisplayValues(); } catch (e) { return null; } };
+  const tabs = INTAKE_TAB_EXTRA.map(n => ss.getSheetByName(n)).filter(Boolean).map(read);
+  const main = ss.getSheets().find(x => x.getSheetId() === INTAKE_TAB_GID) || ss.getSheetByName(INTAKE_TAB_NAME);
+  if (main) tabs.push(read(main));
+  if (!tabs.length) throw new Error('신규방문접수 시트에서 읽을 탭을 찾지 못했습니다.');
   const people = intakeRowsToPeople_.apply(null, tabs);
   const result = { people: people, at: new Date().toISOString() };
   try { cache.put(INTAKE_CACHE_KEY, JSON.stringify(result), INTAKE_CACHE_SECONDS); } catch (e) {}
@@ -163,10 +162,15 @@ function intakeRowsToPeople_() {
   Array.prototype.slice.call(arguments).forEach(values => {
     if (!values || values.length < 2) return;
     const head = values[0].map(h => String(h).replace(/\s/g, ''));
-    const col = names => { for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
+    // 열 이름이 같으면 우선, 없으면 그 이름으로 시작하는 열 ("보호자연락처,성함(방문시…)")
+    const col = names => {
+      for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; }
+      for (const n of names) { const i = head.findIndex(h => h.indexOf(n) === 0); if (i >= 0) return i; }
+      return -1;
+    };
     const cName = col(['이름', '대상자', '어르신이름', '이름(어르신명)', '환자명', '성명', '대상자명']);
-    const cBirth = col(['주민번호/생년월일', '생년월일/주민번호', '생년월일', '주민번호', '생년']);
-    const cBirth2 = col(['생년']);
+    const cBirth = col(['주민번호/생년월일', '생년월일/주민번호', '생년월일', '주민번호']);
+    const cBirth2 = head.indexOf('생년');
     const cAddr = col(['주소']);
     const cPhone = col(['보호자연락처', '연락처']);
     const cGrade = col(['장기요양등급', '등급']);
@@ -240,8 +244,9 @@ function intakePhone_(v) {
   const s = String(v || '');
   let m = s.match(/(01[016789])[-.\s)]*(\d{3,4})[-.\s]*(\d{4})/);
   if (m) return m[1] + '-' + m[2] + '-' + m[3];
-  m = s.match(/(0\d{1,2})[-.\s)]*(\d{3,4})[-.\s]*(\d{4})/);
-  return m ? m[1] + '-' + m[2] + '-' + m[3] : '';
+  m = s.match(/(?:^|[^\d])(0\d{1,2})[-.\s)]*(\d{3,4})[-.\s]*(\d{4})(?!\d)/);
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  return /\d{3}.*\d{4}/.test(s) ? s.trim() : ''; // 모양이 다르면(오타 등) 적힌 그대로
 }
 
 /* (예전) 캘린더에서 읽던 방식 — 지금은 쓰지 않음 */

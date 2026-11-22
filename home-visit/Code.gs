@@ -14,7 +14,7 @@
  */
 
 const APP_TITLE = '재택의료 사회복지 상담기록';
-const APP_VERSION = '2026-11-23k'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
+const APP_VERSION = '2026-11-24a'; // 서버 코드 버전 (휴대폰 화면 아래에 표시)
 // 휴대폰 화면을 불러올 주소 (GitHub main의 home-visit/Index.html)
 const HTML_URL = 'https://raw.githubusercontent.com/bcmedcoophome-cyber/-2026/refs/heads/main/home-visit/Index.html';
 const HTML_CACHE_SECONDS = 300; // 5분마다 GitHub에서 새로 읽음
@@ -89,13 +89,17 @@ function getCachedHtml_(cache) {
 
 /** 처음 한 번 편집기에서 실행: 권한 승인 + 드라이브 폴더/시트 생성 */
 function setup() {
+  ownerOnly_();
   const { folder, ss } = ensureStorage_();
   Logger.log('저장 폴더: ' + folder.getUrl());
   Logger.log('기록 시트: ' + ss.getUrl());
   const code = UrlFetchApp.fetch(HTML_URL, { muteHttpExceptions: true }).getResponseCode();
   Logger.log(code === 200 ? '화면: GitHub에서 불러옴' : '화면: GitHub 읽기 실패(' + code + ') → 프로젝트 안 Index 파일 사용');
+  const admin = ensureAdmin_();
+  if (admin) Logger.log('★ 관리자 계정을 만들었습니다 → 이름: 관리자 / 비밀번호: ' + admin + '  (앱에서 로그인한 뒤 바로 바꾸세요)');
+  else Logger.log('로그인 계정: ' + usersGet_().map(u => u.name + (u.role === 'admin' ? '(관리자)' : '') + (u.active ? '' : '(중지)')).join(', '));
   CacheService.getScriptCache().remove(INTAKE_CACHE_KEY);
-  const people = getCalendarPeople().people;
+  const people = getCalendarPeople_().people;
   Logger.log('「신규방문접수」 시트에서 읽은 어르신: ' + people.length + '명 (예: ' + people.slice(-5).map(p => p.name + ' ' + p.birth).join(', ') + ')');
 }
 
@@ -135,7 +139,7 @@ const INTAKE_CACHE_KEY = 'intakePeople';
 const INTAKE_CACHE_SECONDS = 5 * 60;
 
 /** 화면이 부르는 이름은 그대로 (예전 화면과 호환) */
-function getCalendarPeople() {
+function getCalendarPeople_() {
   return getIntakePeople_();
 }
 
@@ -360,7 +364,7 @@ function calInfo_(desc) {
 }
 
 /** 화면을 열 때 환자 목록(지난 기록 포함)과 저장 위치를 돌려줌 */
-function getInitData() {
+function getInitData_() {
   const { folder, ss } = ensureStorage_();
   const sh = getSheet_(ss);
   const patients = {};
@@ -393,12 +397,12 @@ function getInitData() {
  * record = { id, author, meta:{patient,birth,date,visitType}, crisis:[...],
  *            sections:[{title, items:[{label, value}]}] }
  */
-function saveDraft(record) {
+function saveDraft_(record) {
   return upsertVisit_(record, false);
 }
 
 /** [전송] 버튼: 방문기록지 문서를 만들고 같은 줄을 '전송완료'로 바꿈 */
-function saveVisit(record) {
+function saveVisit_(record) {
   return upsertVisit_(record, true);
 }
 
@@ -463,7 +467,7 @@ const TODO_OPEN = '예정';
 const TODO_DONE = '완료';
 
 /** [환자카드] 탭: 환자별 방문 기록 (최근 방문이 위) */
-function getPatientCards() {
+function getPatientCards_() {
   const { ss } = ensureStorage_();
   const sh = getSheet_(ss);
   const lastRow = sh.getLastRow();
@@ -504,7 +508,7 @@ function getPatientCards() {
 }
 
 /** [방문예정] 탭: 전체 목록 */
-function getTodos() {
+function getTodos_() {
   const { ss } = ensureStorage_();
   const sh = getTodoSheet_(ss);
   const lastRow = sh.getLastRow();
@@ -522,7 +526,7 @@ function getTodos() {
 }
 
 /** 방문예정 추가·수정·완료 (같은 기록ID는 같은 줄을 덮어씀) */
-function saveTodo(t) {
+function saveTodo_(t) {
   if (!t || !t.id || !String(t.name || '').trim()) throw new Error('방문할 분 이름을 입력해 주세요.');
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -556,7 +560,7 @@ function saveTodo(t) {
 }
 
 /** 방문예정 삭제 */
-function deleteTodo(id) {
+function deleteTodo_(id) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -654,7 +658,7 @@ function safeCell_(v) {
  *  (그 앱은 서명 그림만 저장하고 개인정보는 다루지 않음)
  * ===================================================================== */
 const SMS_SIGN_FOLDER = '문자서명';
-function getSmsSignature(token) {
+function getSmsSignature_(token) {
   if (!/^[a-f0-9]{24}-[a-z0-9]{6,12}$/.test(String(token || ''))) throw new Error('서명 링크 번호가 올바르지 않습니다.');
   const { folder } = ensureStorage_();
   const box = getSubFolder_(folder, SMS_SIGN_FOLDER);
@@ -764,7 +768,7 @@ const CONSENT_SHEET = '동의서';
 const CONSENT_FOLDER = '동의서';
 const CONSENT_TITLE = '「장기요양 재택의료센터 시범사업」 참여를 위한\n신청서 및 개인정보 수집·이용 및 제공 동의서 (공단용)';
 
-function saveConsent(c) {
+function saveConsent_(c) {
   if (!c || !c.id || !c.person || !c.person.name) throw new Error('성명을 입력해 주세요.');
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -1021,4 +1025,152 @@ function createConsentPdf_(folder, c) {
     try { DriveApp.getFileById(doc.getId()).setTrashed(true); } catch (e2) {}
     throw e;
   }
+}
+
+
+/* =====================================================================
+ *  로그인 — 직원별 이름+비밀번호, 관리자가 계정 관리
+ *  - 화면이 서버에 부탁하는 일은 모두 api()를 거치며, 로그인 증표가 없으면 아무 정보도 주지 않음
+ *  - 비밀번호는 원문을 저장하지 않음 (소금+SHA-256 여러 번)
+ *  - 5번 틀리면 10분 잠금, 증표는 서명되어 위조 불가, 30일 뒤 만료
+ *  - 비밀번호를 바꾸거나 계정을 중지하면 그 사람의 기존 증표는 모두 무효
+ * ===================================================================== */
+const SESSION_DAYS = 30;
+const PW_MIN = 6;
+const API_FNS = { getInitData: getInitData_, getCalendarPeople: getCalendarPeople_, saveDraft: saveDraft_, saveVisit: saveVisit_,
+  getPatientCards: getPatientCards_, getTodos: getTodos_, saveTodo: saveTodo_, deleteTodo: deleteTodo_,
+  getSmsSignature: getSmsSignature_, saveConsent: saveConsent_ };
+const ADMIN_FNS = { adminListUsers: adminListUsers_, adminSaveUser: adminSaveUser_, adminDeleteUser: adminDeleteUser_ };
+
+/** 편집기에서 직접 실행할 때만 허용 (웹에서 부르면 거절) */
+function ownerOnly_() {
+  const a = Session.getActiveUser().getEmail(), e = Session.getEffectiveUser().getEmail();
+  if (!a || a !== e) throw new Error('편집기에서만 실행할 수 있습니다.');
+}
+function props_() { return PropertiesService.getScriptProperties(); }
+function usersGet_() { try { return JSON.parse(props_().getProperty('USERS') || '[]'); } catch (e) { return []; } }
+function usersPut_(list) { props_().setProperty('USERS', JSON.stringify(list)); }
+function secret_() {
+  let s = props_().getProperty('AUTH_SECRET');
+  if (!s) { s = Utilities.getUuid() + Utilities.getUuid(); props_().setProperty('AUTH_SECRET', s); }
+  return s;
+}
+function pwHash_(salt, pw) {
+  let h = salt + '|' + pw;
+  for (let i = 0; i < 300; i++) h = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, h + salt, Utilities.Charset.UTF_8));
+  return h;
+}
+function setPw_(u, pw) {
+  if (String(pw || '').length < PW_MIN) throw new Error('비밀번호는 ' + PW_MIN + '자 이상으로 정해 주세요.');
+  u.salt = Utilities.getUuid(); u.hash = pwHash_(u.salt, String(pw)); u.ver = (u.ver || 0) + 1;
+}
+function randomPw_() { const h = Utilities.getUuid().replace(/-/g, ''); return ('0000000' + parseInt(h.slice(0, 12), 16)).slice(-8); }
+/** 계정이 하나도 없으면 관리자 계정을 만들고 임시 비밀번호를 돌려줌 */
+function ensureAdmin_() {
+  const list = usersGet_();
+  if (list.some(u => u.role === 'admin' && u.active)) return '';
+  const pw = randomPw_();
+  const u = list.find(x => x.name === '관리자') || { name: '관리자' };
+  u.role = 'admin'; u.active = true; u.mustChange = true; setPw_(u, pw);
+  usersPut_(list.filter(x => x !== u).concat(u));
+  return pw;
+}
+/** 관리자 비밀번호를 잊었을 때: 편집기에서 이 함수를 실행 → 실행 로그에 새 임시 비밀번호 */
+function resetAdminPassword() {
+  ownerOnly_();
+  const list = usersGet_();
+  let u = list.find(x => x.role === 'admin' && x.name === '관리자');
+  if (!u) { u = { name: '관리자', role: 'admin' }; list.push(u); }
+  const pw = randomPw_();
+  u.active = true; u.mustChange = true; setPw_(u, pw); usersPut_(list);
+  Logger.log('관리자 임시 비밀번호: ' + pw + '  (로그인한 뒤 바로 바꾸세요)');
+}
+
+function signTok_(payload) {
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload, secret_()));
+}
+function makeToken_(u) {
+  const p = Utilities.base64EncodeWebSafe(JSON.stringify({ n: u.name, v: u.ver, e: Date.now() + SESSION_DAYS * 864e5 }), Utilities.Charset.UTF_8);
+  return p + '.' + signTok_(p);
+}
+function sameText_(a, b) { // 시간차 공격 방지 비교
+  a = String(a); b = String(b);
+  let d = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) d |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return d === 0;
+}
+function checkToken_(t) {
+  const parts = String(t || '').split('.');
+  if (parts.length !== 2 || !sameText_(signTok_(parts[0]), parts[1])) return null;
+  let d;
+  try { d = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString('UTF-8')); } catch (e) { return null; }
+  if (!d || !(d.e > Date.now())) return null;
+  const u = usersGet_().find(x => x.name === d.n);
+  if (!u || !u.active || u.ver !== d.v) return null;
+  return u;
+}
+function pubUser_(u) { return { name: u.name, role: u.role, mustChange: !!u.mustChange }; }
+
+/** 로그인 { name, pw } → { token, user } */
+function login(req) {
+  const name = String((req && req.name) || '').trim(), pw = String((req && req.pw) || '');
+  if (!name || !pw) throw new Error('이름과 비밀번호를 입력해 주세요.');
+  const cache = CacheService.getScriptCache(), key = 'loginFail_' + Utilities.base64EncodeWebSafe(name, Utilities.Charset.UTF_8);
+  const fails = +(cache.get(key) || 0);
+  if (fails >= 5) throw new Error('비밀번호를 여러 번 틀려 10분 동안 로그인할 수 없습니다. 잠시 후 다시 해 주세요.');
+  const u = usersGet_().find(x => x.name === name);
+  if (!u || !u.active || !sameText_(pwHash_(u.salt, pw), u.hash)) {
+    cache.put(key, String(fails + 1), 600);
+    Utilities.sleep(700);
+    throw new Error('이름 또는 비밀번호가 맞지 않습니다.' + (fails + 1 >= 3 ? ' (' + (fails + 1) + '/5회)' : ''));
+  }
+  cache.remove(key);
+  return { token: makeToken_(u), user: pubUser_(u) };
+}
+
+/** 화면 → 서버 요청은 모두 여기로 { t: 증표, fn, arg } */
+function api(req) {
+  const u = checkToken_(req && req.t);
+  if (!u) throw new Error('LOGIN_REQUIRED');
+  const fn = String((req && req.fn) || '');
+  if (fn === 'me') return pubUser_(u);
+  if (fn === 'changePassword') return changePassword_(u, req.arg || {});
+  if (ADMIN_FNS[fn]) {
+    if (u.role !== 'admin') throw new Error('관리자만 할 수 있습니다.');
+    return ADMIN_FNS[fn](req.arg, u);
+  }
+  if (!API_FNS[fn]) throw new Error('알 수 없는 요청입니다.');
+  return API_FNS[fn](req.arg);
+}
+
+function changePassword_(me, a) {
+  const list = usersGet_(), u = list.find(x => x.name === me.name);
+  if (!sameText_(pwHash_(u.salt, String(a.old || '')), u.hash)) throw new Error('지금 비밀번호가 맞지 않습니다.');
+  if (String(a.pw || '') === String(a.old || '')) throw new Error('새 비밀번호를 지금과 다르게 정해 주세요.');
+  setPw_(u, a.pw); u.mustChange = false; usersPut_(list);
+  return { token: makeToken_(u), user: pubUser_(u) };
+}
+function adminListUsers_() {
+  return usersGet_().map(u => ({ name: u.name, role: u.role, active: !!u.active, mustChange: !!u.mustChange }));
+}
+/** { name, pw?, role?, active? } — 새 계정은 pw 필수, 비밀번호를 정하면 다음 로그인 때 바꾸게 함 */
+function adminSaveUser_(a, me) {
+  const name = String((a && a.name) || '').trim();
+  if (!/^[가-힣A-Za-z0-9 ._-]{2,20}$/.test(name)) throw new Error('이름은 2~20자(한글·영문·숫자)로 적어 주세요.');
+  const list = usersGet_();
+  let u = list.find(x => x.name === name);
+  if (!u) { if (!a.pw) throw new Error('새 계정은 비밀번호가 필요합니다.'); u = { name: name, role: 'staff', active: true }; list.push(u); }
+  if (a.role === 'admin' || a.role === 'staff') u.role = a.role;
+  if (typeof a.active === 'boolean') { u.active = a.active; if (!a.active) u.ver = (u.ver || 0) + 1; }
+  if (a.pw) { setPw_(u, a.pw); u.mustChange = u.name !== me.name; }
+  if (!list.some(x => x.role === 'admin' && x.active)) throw new Error('관리자가 한 명은 있어야 합니다.');
+  usersPut_(list);
+  return adminListUsers_();
+}
+function adminDeleteUser_(name, me) {
+  if (name === me.name) throw new Error('지금 로그인한 계정은 지울 수 없습니다.');
+  const list = usersGet_().filter(x => x.name !== name);
+  if (!list.some(x => x.role === 'admin' && x.active)) throw new Error('관리자가 한 명은 있어야 합니다.');
+  usersPut_(list);
+  return adminListUsers_();
 }

@@ -57,7 +57,7 @@
   .suggest .src { display: inline-block; font-size: 11px; font-weight: 700; color: var(--brand); margin-left: 6px; }
   .field > label, .field > .label { display: block; font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
   .req { color: var(--danger); }
-  input[type=text], input[type=date], input[type=number], input[type=tel], textarea {
+  input[type=text], input[type=date], input[type=number], input[type=tel], input[type=password], textarea {
     width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
     border-radius: 10px; padding: 11px 12px; }
   textarea { min-height: 96px; resize: vertical; }
@@ -186,12 +186,26 @@
     max-height: 58vh; overflow: auto; }
   dialog .d-foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
   dialog .d-foot .btn { flex: 1; }
+  #loginView { position: fixed; inset: 0; z-index: 200; background: var(--bg); overflow: auto; }
+  #loginView .box { max-width: 380px; margin: 12vh auto 0; padding: 0 20px; }
+  #loginView h2 { font-size: 22px; margin: 0 0 6px; }
+  #loginView .field { margin-top: 14px; }
+  #loginView .btn { width: 100%; margin-top: 18px; }
+  .login-err { color: var(--danger); font-size: 14px; min-height: 1.4em; margin-top: 10px; }
+  #acctBtn { white-space: nowrap; }
+  .d-body { padding: 14px 16px; max-height: 70vh; overflow: auto; }
+  .d-body h3 { font-size: 15px; margin: 18px 0 8px; } .d-body h3:first-child { margin-top: 0; }
+  .ulist { list-style: none; margin: 0; padding: 0; }
+  .ulist li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .ulist li b { flex: 1; min-width: 90px; }
+  .ulist .tag { font-size: 12px; color: var(--muted); }
 </style>
 </head>
 <body>
 <header>
   <h1>🏠 재택의료 방문상담</h1>
   <span id="timer" title="방문 경과시간">00:00</span>
+  <button class="btn small" type="button" id="acctBtn" hidden>👤</button>
 </header>
 <nav class="tabs" role="tablist">
   <button type="button" role="tab" data-tab="visit" aria-selected="true">📝 방문기록</button>
@@ -288,6 +302,39 @@
   </div>
 </dialog>
 
+<div id="loginView" hidden>
+  <div class="box">
+    <h2>🏠 재택의료 방문상담</h2>
+    <p class="note">센터 직원만 쓸 수 있습니다. 이름과 비밀번호로 로그인해 주세요.</p>
+    <form id="loginForm" autocomplete="on">
+      <div class="field"><label for="lgName">이름</label><input type="text" id="lgName" autocomplete="username" placeholder="예: 김민정"></div>
+      <div class="field"><label for="lgPw">비밀번호</label><input type="password" id="lgPw" autocomplete="current-password"></div>
+      <button class="btn primary" type="submit" id="lgBtn">로그인</button>
+      <div class="login-err" id="lgErr"></div>
+    </form>
+    <p class="note">비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요. 한 번 로그인하면 이 휴대폰에서 30일 동안 유지됩니다.</p>
+  </div>
+</div>
+<dialog id="acctDlg">
+  <div class="d-head" id="acctHead">내 계정</div>
+  <div class="d-body">
+    <div id="pwMust" class="banner err" style="display:none">처음 로그인했거나 비밀번호가 초기화되었습니다. 새 비밀번호로 바꿔 주세요.</div>
+    <h3>비밀번호 바꾸기</h3>
+    <div class="field"><label for="pwOld">지금 비밀번호</label><input type="password" id="pwOld" autocomplete="current-password"></div>
+    <div class="row"><div class="field"><label for="pwNew">새 비밀번호 (6자 이상)</label><input type="password" id="pwNew" autocomplete="new-password"></div>
+      <div class="field"><label for="pwNew2">새 비밀번호 확인</label><input type="password" id="pwNew2" autocomplete="new-password"></div></div>
+    <button class="btn small" type="button" id="pwBtn">비밀번호 바꾸기</button> <span class="login-err" id="pwMsg"></span>
+    <div id="adminBox" hidden>
+      <h3>직원 계정 관리 (관리자)</h3>
+      <ul class="ulist" id="uList"></ul>
+      <div class="row" style="margin-top:10px"><div class="field"><label for="uName">새 직원 이름</label><input type="text" id="uName" placeholder="예: 김민정"></div>
+        <div class="field"><label for="uPw">임시 비밀번호 (6자 이상)</label><input type="text" id="uPw" autocomplete="off"></div></div>
+      <button class="btn small" type="button" id="uAdd">직원 추가</button> <span class="login-err" id="uMsg"></span>
+      <p class="note">직원은 임시 비밀번호로 처음 로그인한 뒤 자기 비밀번호로 바꿉니다. 퇴사자는 [사용 중지]하면 바로 로그인이 끊깁니다.</p>
+    </div>
+  </div>
+  <div class="d-foot"><button class="btn" type="button" id="logoutBtn">로그아웃</button><button class="btn primary" type="button" id="acctClose">닫기</button></div>
+</dialog>
 <dialog id="savedDlg">
   <div class="d-head">저장된 기록 (아직 전송 안 함)</div>
   <div id="savedList"></div>
@@ -362,7 +409,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-11-23f'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-11-24a'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -661,13 +708,121 @@ function validate() {
 }
 
 /* ---------- 전송 / 미전송 대기열 ---------- */
+/* ---------- 로그인 ----------
+ * 서버가 새 버전이면 모든 요청을 api()로 보내며 로그인 증표를 함께 보냄. 옛 서버면 예전처럼 바로 부름 */
+const KEY_TOKEN = 'hv_token', KEY_USER = 'hv_user', KEY_LOGIN_NAME = 'hv_login_name';
+const LEGACY = IS_GAS ? typeof google.script.run.api !== 'function' : false;
+let me = LS.get(KEY_USER, null);
+function gas(fn, arg) {
+  return new Promise((resolve, reject) => { google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg); });
+}
 function callServer(fn, arg) {
-  return new Promise((resolve, reject) => {
-    if (!IS_GAS) {
-      setTimeout(() => resolve(demoServer(fn, arg)), 300);
-      return;
-    }
-    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg);
+  if (!IS_GAS) return new Promise(resolve => setTimeout(() => resolve(demoServer(fn, arg)), 300));
+  if (LEGACY) return gas(fn, arg);
+  return gas('api', { t: LS.get(KEY_TOKEN, ''), fn: fn, arg: arg }).catch(err => {
+    if (/LOGIN_REQUIRED/.test(String(err && err.message || err))) { needLogin(); throw new Error('로그인이 필요합니다'); }
+    throw err;
+  });
+}
+let afterLogin = null;
+function needLogin() {
+  LS.del(KEY_TOKEN); me = null; LS.del(KEY_USER);
+  $('acctBtn').hidden = true;
+  $('lgName').value = LS.get(KEY_LOGIN_NAME, ''); $('lgPw').value = ''; $('lgErr').textContent = '';
+  $('loginView').hidden = false;
+}
+async function doLogin(e) {
+  e.preventDefault();
+  const name = $('lgName').value.trim(), pw = $('lgPw').value;
+  if (!name || !pw) { $('lgErr').textContent = '이름과 비밀번호를 입력해 주세요.'; return; }
+  $('lgBtn').disabled = true; $('lgBtn').textContent = '확인 중…'; $('lgErr').textContent = '';
+  try {
+    const r = await gas('login', { name: name, pw: pw });
+    onLoggedIn(r);
+    $('loginView').hidden = true;
+    if (afterLogin) afterLogin();
+    if (me.mustChange) openAcct();
+  } catch (err) { $('lgErr').textContent = errText(err); }
+  finally { $('lgBtn').disabled = false; $('lgBtn').textContent = '로그인'; $('lgPw').value = ''; }
+}
+function onLoggedIn(r) {
+  LS.set(KEY_TOKEN, r.token); me = r.user; LS.set(KEY_USER, me); LS.set(KEY_LOGIN_NAME, me.name);
+  // 로그인한 이름을 작성자로 ('관리자' 공용 계정은 제외 — 작성자 이름이 드라이브 폴더 이름이 됨)
+  if (me.name !== '관리자') {
+    LS.set(KEY_AUTHOR, me.name);
+    if (!hasValue(state.author)) { state.author = me.name; paint(); saveDraft(); }
+  }
+  showAcctBtn();
+}
+function showAcctBtn() {
+  if (!me) return;
+  $('acctBtn').textContent = '👤 ' + me.name; $('acctBtn').hidden = false;
+}
+function openAcct() {
+  $('acctHead').textContent = '내 계정 — ' + me.name + (me.role === 'admin' ? ' (관리자)' : '');
+  $('pwMust').style.display = me.mustChange ? 'block' : 'none';
+  ['pwOld', 'pwNew', 'pwNew2'].forEach(id => { $(id).value = ''; }); $('pwMsg').textContent = '';
+  $('adminBox').hidden = me.role !== 'admin';
+  if (me.role === 'admin') loadUsers();
+  $('acctDlg').showModal();
+}
+async function changePw() {
+  const o = $('pwOld').value, n = $('pwNew').value, n2 = $('pwNew2').value, msg = $('pwMsg');
+  if (n.length < 6) { msg.textContent = '새 비밀번호는 6자 이상으로 정해 주세요.'; return; }
+  if (n !== n2) { msg.textContent = '새 비밀번호 두 칸이 서로 다릅니다.'; return; }
+  try {
+    const r = await callServer('changePassword', { old: o, pw: n });
+    onLoggedIn(r); $('pwMust').style.display = 'none';
+    ['pwOld', 'pwNew', 'pwNew2'].forEach(id => { $(id).value = ''; });
+    msg.style.color = 'var(--ok)'; msg.textContent = '✓ 비밀번호를 바꿨습니다.';
+  } catch (err) { msg.style.color = ''; msg.textContent = errText(err); }
+}
+function renderUsers(list) {
+  $('uList').innerHTML = list.map(u => `<li><b>${esc(u.name)}</b><span class="tag">${u.role === 'admin' ? '관리자' : '직원'}${u.active ? '' : ' · 사용 중지'}${u.mustChange ? ' · 임시 비밀번호' : ''}</span>
+    ${u.name === me.name ? '' : `<button class="btn small" type="button" data-ureset="${esc(u.name)}">비밀번호 초기화</button>
+    <button class="btn small" type="button" data-uactive="${esc(u.name)}" data-v="${u.active ? '0' : '1'}">${u.active ? '사용 중지' : '다시 사용'}</button>
+    <button class="btn small" type="button" data-urole="${esc(u.name)}" data-v="${u.role === 'admin' ? 'staff' : 'admin'}">${u.role === 'admin' ? '직원으로' : '관리자로'}</button>
+    <button class="btn small" type="button" data-udel="${esc(u.name)}">삭제</button>`}</li>`).join('');
+}
+async function loadUsers() {
+  try { renderUsers(await callServer('adminListUsers')); } catch (err) { $('uMsg').textContent = errText(err); }
+}
+async function userAction(e) {
+  const b = e.target.closest('button'); if (!b) return;
+  const msg = $('uMsg'); msg.style.color = ''; msg.textContent = '';
+  try {
+    let list;
+    if (b.dataset.ureset) {
+      const pw = prompt(b.dataset.ureset + '님의 새 임시 비밀번호 (6자 이상)');
+      if (!pw) return;
+      list = await callServer('adminSaveUser', { name: b.dataset.ureset, pw: pw });
+      msg.style.color = 'var(--ok)'; msg.textContent = '✓ ' + b.dataset.ureset + '님 비밀번호를 초기화했습니다. 임시 비밀번호를 직접 알려 주세요.';
+    } else if (b.dataset.uactive) list = await callServer('adminSaveUser', { name: b.dataset.uactive, active: b.dataset.v === '1' });
+    else if (b.dataset.urole) list = await callServer('adminSaveUser', { name: b.dataset.urole, role: b.dataset.v });
+    else if (b.dataset.udel) { if (!confirm(b.dataset.udel + '님 계정을 삭제할까요?')) return; list = await callServer('adminDeleteUser', b.dataset.udel); }
+    if (list) renderUsers(list);
+  } catch (err) { msg.textContent = errText(err); }
+}
+async function addUser() {
+  const msg = $('uMsg'); msg.style.color = ''; msg.textContent = '';
+  const name = $('uName').value.trim(), pw = $('uPw').value.trim();
+  if (!name || pw.length < 6) { msg.textContent = '이름과 6자 이상의 임시 비밀번호를 적어 주세요.'; return; }
+  try {
+    renderUsers(await callServer('adminSaveUser', { name: name, pw: pw }));
+    $('uName').value = ''; $('uPw').value = '';
+    msg.style.color = 'var(--ok)'; msg.textContent = '✓ ' + name + '님 계정을 만들었습니다. 이름과 임시 비밀번호를 직접 알려 주세요.';
+  } catch (err) { msg.textContent = errText(err); }
+}
+function initLogin() {
+  $('loginForm').addEventListener('submit', doLogin);
+  $('acctBtn').addEventListener('click', openAcct);
+  $('acctClose').addEventListener('click', () => $('acctDlg').close());
+  $('pwBtn').addEventListener('click', changePw);
+  $('uAdd').addEventListener('click', addUser);
+  $('uList').addEventListener('click', userAction);
+  $('logoutBtn').addEventListener('click', () => {
+    if (!confirm('로그아웃할까요? 다시 쓰려면 이름과 비밀번호가 필요합니다.')) return;
+    $('acctDlg').close(); needLogin();
   });
 }
 
@@ -1981,8 +2136,8 @@ function init() {
   $('retryBtn').addEventListener('click', flushQueue);
   window.addEventListener('online', flushQueue);
 
-  if (IS_GAS) {
-    callServer('getInitData').then(d => {
+  initLogin();
+  const loadServer = () => callServer('getInitData').then(d => {
       patients = d.patients || [];
       const ver = '화면 ' + SCREEN_VERSION + ' · 서버 ' + (d.version || '옛날 버전');
       $('draftState').dataset.version = ver;
@@ -1995,7 +2150,12 @@ function init() {
         fillPatientList();
         if (!$('consentMain').hidden) cFillFromCal(false);
       }).catch(() => {});
-    }).catch(err => showError('드라이브 연결 확인 필요: ' + (err && err.message ? err.message : err)));
+    }).catch(err => { if (!/로그인이 필요/.test(errText(err))) showError('드라이브 연결 확인 필요: ' + errText(err)); });
+  if (IS_GAS) {
+    afterLogin = loadServer;
+    if (LEGACY) loadServer();
+    else if (!LS.get(KEY_TOKEN, '')) needLogin();
+    else { showAcctBtn(); loadServer(); }
   }
 }
 try { init(); } catch (err) { setTimeout(function () { throw err; }); }

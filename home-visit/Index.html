@@ -44,7 +44,17 @@
   section.card.closed .body { display: none; }
   section.card.crisis > h2 { color: var(--danger); }
   .body { padding: 0 16px 14px; }
-  .field { margin-bottom: 14px; }
+  .field { margin-bottom: 14px; position: relative; }
+  /* 이름 칠 때 뜨는 어르신 목록 */
+  .suggest { position: absolute; left: 0; right: 0; z-index: 30; margin-top: 4px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.18); max-height: 320px; overflow-y: auto; }
+  .suggest button { display: block; width: 100%; text-align: left; font: inherit; background: none; border: 0; border-bottom: 1px solid var(--line);
+    padding: 12px 14px; color: var(--ink); cursor: pointer; }
+  .suggest button:last-child { border-bottom: 0; }
+  .suggest button:active, .suggest button:focus { background: var(--brand-soft); outline: none; }
+  .suggest b { font-size: 17px; }
+  .suggest small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .suggest .src { display: inline-block; font-size: 11px; font-weight: 700; color: var(--brand); margin-left: 6px; }
   .field > label, .field > .label { display: block; font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
   .req { color: var(--danger); }
   input[type=text], input[type=date], input[type=number], input[type=tel], textarea {
@@ -221,7 +231,7 @@
     <h2 id="tFormTitle">방문할 분 적기</h2>
     <div class="body">
       <div class="row">
-        <div class="field"><label for="t-name">이름 <span class="req">*</span></label><input type="text" id="t-name" list="patientList" autocomplete="off"></div>
+        <div class="field"><label for="t-name">이름 <span class="req">*</span></label><input type="text" id="t-name" autocomplete="off"></div>
         <div class="field"><label for="t-birth">생년월일</label><input type="text" id="t-birth" inputmode="numeric" maxlength="10" placeholder="예: 19450312"></div>
       </div>
       <div class="row">
@@ -303,7 +313,7 @@ window.addEventListener('error', function (e) {
  * ===================================================================== */
 const FORM = [
   { id: 'basic', title: '기본정보', open: true, fields: [
-    { key: 'patient', label: '환자명', type: 'text', required: true, list: 'patientList', half: true },
+    { key: 'patient', label: '환자명', type: 'text', required: true, half: true },
     { key: 'birth', label: '생년월일', type: 'text', half: true, placeholder: '예: 19450312', numeric: true },
     { key: 'date', label: '방문일', type: 'date', required: true, half: true },
     { key: 'author', label: '작성자', type: 'text', required: true, half: true, remember: true },
@@ -348,7 +358,7 @@ const FORM = [
 ];
 
 /* ======================== 이하 동작 코드 ======================== */
-const SCREEN_VERSION = '2026-11-22'; // 화면 버전 (GitHub에서 자동으로 불러옴)
+const SCREEN_VERSION = '2026-11-23'; // 화면 버전 (GitHub에서 자동으로 불러옴)
 const IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -363,6 +373,67 @@ let patients = [];
 let calPeople = []; // 구글 캘린더에서 읽은 어르신 { name, birth, addr, phone, ltcNo }
 
 /* 이름(과 생년월일)로 캘린더 어르신 찾기: 동명이인이 여럿이면 생년월일이 맞는 분만 */
+/* 방문기록(지난 기록)과 구글 캘린더를 합친 어르신 목록 { name, birth, addr, phone, ltcNo, rec, cal } */
+function allPeople() {
+  const map = {};
+  const add = (p, src) => {
+    if (!p || !p.name) return;
+    const key = p.name + '|' + (p.birth || '');
+    const cur = map[key] || (map[key] = { name: p.name, birth: p.birth || '', addr: '', phone: '', ltcNo: '' });
+    ['addr', 'phone', 'ltcNo'].forEach(k => { if (p[k] && !cur[k]) cur[k] = p[k]; });
+    cur[src] = true;
+  };
+  calPeople.forEach(p => add(p, 'cal'));
+  patients.forEach(p => add({ name: p.name, birth: p.birth }, 'rec'));
+  const list = Object.keys(map).map(k => map[k]);
+  // 생년월일 없는 항목은 같은 이름에 생년월일 있는 분이 한 분뿐이면 그분과 합침
+  return list.filter(p => {
+    if (p.birth) return true;
+    const same = list.filter(q => q.name === p.name && q.birth);
+    if (same.length !== 1) return true;
+    ['addr', 'phone', 'ltcNo'].forEach(k => { if (p[k] && !same[0][k]) same[0][k] = p[k]; });
+    same[0].rec = same[0].rec || p.rec; same[0].cal = same[0].cal || p.cal;
+    return false;
+  });
+}
+
+/* 이름 칸 아래에 맞는 어르신 목록을 띄우고, 고르면 onPick(사람) */
+function attachSuggest(input, onPick) {
+  if (!input || input.dataset.suggest) return;
+  input.dataset.suggest = '1';
+  input.setAttribute('autocomplete', 'off');
+  let box = null;
+  const close = () => { if (box) { box.remove(); box = null; } };
+  const open = () => {
+    const q = input.value.trim();
+    close();
+    if (!q) return;
+    const hits = allPeople().filter(p => p.name.indexOf(q) >= 0)
+      .sort((a, b) => (a.name.indexOf(q) - b.name.indexOf(q)) || a.name.localeCompare(b.name)).slice(0, 8);
+    if (!hits.length) return;
+    box = document.createElement('div');
+    box.className = 'suggest';
+    box.innerHTML = hits.map((p, i) => {
+      const sub = [p.birth, p.addr].filter(Boolean).join(' · ') || '생년월일 정보 없음';
+      const src = (p.rec ? '<span class="src">기록</span>' : '') + (p.cal ? '<span class="src">📅캘린더</span>' : '');
+      return `<button type="button" data-i="${i}"><b>${esc(p.name)}</b>${src}<small>${esc(sub)}</small></button>`;
+    }).join('');
+    // 손가락을 대는 순간 고름 (칸에서 포커스가 빠져 목록이 닫히기 전에)
+    box.addEventListener('pointerdown', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      e.preventDefault();
+      const p = hits[+b.dataset.i];
+      close();
+      input.value = p.name;
+      onPick(p);
+    });
+    input.parentElement.appendChild(box);
+  };
+  input.addEventListener('input', open);
+  input.addEventListener('focus', open);
+  input.addEventListener('blur', () => setTimeout(close, 150));
+}
+
 function findCal(name, birth) {
   const n = String(name || '').trim();
   if (!n) return null;
@@ -394,6 +465,12 @@ function render() {
   form.querySelectorAll('input, textarea').forEach(el => el.addEventListener('input', onInput));
   form.querySelectorAll('.phrase').forEach(b => b.addEventListener('click', onPhrase));
   $('f-patient').addEventListener('change', onPatientPicked);
+  attachSuggest($('f-patient'), p => {
+    state.patient = p.name;
+    if (p.birth) state.birth = p.birth;
+    paint(); saveDraft();
+    onPatientPicked();
+  });
 }
 
 function renderFields(fields) {
@@ -945,7 +1022,7 @@ function renderConsent() {
     <p class="note">${esc(F().no)} ${esc(F().title.replace('\n', ' '))}</p>
   </div></section>
   <section class="card"><h2>신청서 (정보주체 본인)</h2><div class="body">
-    <div class="row">${cInput('name', '성명', { req: true, list: 'patientList' })}${cInput('birth', '생년월일', { req: true, ph: '예: 19371129', num: true })}</div>
+    <div class="row">${cInput('name', '성명', { req: true })}${cInput('birth', '생년월일', { req: true, ph: '예: 19371129', num: true })}</div>
     <div class="row">${cInput('ltcNo', '장기요양인정번호', { ph: 'L로 시작' })}${cInput('phone', '연락처', { type: 'tel', ph: '010-0000-0000' })}</div>
     ${cInput('addr', '주소 (주민등록지)')}
     ${cInput('addr2', '실제 거주지', { ph: '주민등록지와 같으면 비워 두세요' })}
@@ -977,6 +1054,20 @@ function renderConsent() {
   </div></section>`;
 
   const f = $('cform');
+  attachSuggest($('c-name'), p => {
+    // 다른 분을 고르면 이전 분의 인적사항을 지우고 새로 채움, 같은 분이면 빈 칸만 채움
+    const other = cstate.name !== p.name || (p.birth && cstate.birth && cstate.birth !== p.birth);
+    cstate.name = p.name;
+    const got = [];
+    if (other) { cstate.birth = ''; cstate.addr = ''; cstate.addr2 = ''; cstate.phone = ''; cstate.ltcNo = ''; }
+    if (p.birth && !hasValue(cstate.birth)) { cstate.birth = p.birth; got.push('생년월일'); }
+    [['addr', '주소'], ['phone', '연락처'], ['ltcNo', '장기요양인정번호']].forEach(([k, lab]) => {
+      if (p[k] && !hasValue(cstate[k])) { cstate[k] = p[k]; got.push(lab); }
+    });
+    document.querySelectorAll('#cform input[data-ckey]').forEach(el => { if (el.type !== 'checkbox') el.value = cstate[el.dataset.ckey] || ''; });
+    cSave();
+    if (got.length) flash('cOk', `${esc(p.name)}님 ${got.join(', ')}을(를) 채웠습니다. 맞는지 확인해 주세요.`, 8000);
+  });
   f.querySelectorAll('.chip[data-ckey]').forEach(b => b.addEventListener('click', onCChip));
   f.querySelectorAll('input[data-ckey]').forEach(el => el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', onCInput));
   f.querySelectorAll('[data-clear]').forEach(b => b.addEventListener('click', () => { pads[b.dataset.clear].clear(); cstate['sig_' + b.dataset.clear] = ''; cSave(); }));
@@ -1595,6 +1686,10 @@ function initLists() {
   $('tSave').addEventListener('click', tSubmit);
   $('tCancel').addEventListener('click', tFormReset);
   $('t-birth').addEventListener('input', e => { e.target.value = formatBirth(e.target.value); });
+  attachSuggest($('t-name'), p => {
+    $('t-name').value = p.name;
+    if (p.birth) $('t-birth').value = p.birth;
+  });
   $('t-name').addEventListener('change', () => {
     // 전에 방문한 분이면 생년월일을 채움 (같은 이름이 한 분일 때만)
     const births = patients.filter(p => sameName(p.name, $('t-name').value) && p.birth).map(p => p.birth)
